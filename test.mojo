@@ -1,25 +1,24 @@
-from testing import assert_equal, TestSuite
-from memory import UnsafePointer
+from std.testing import assert_equal, TestSuite
+from std.memory import UnsafePointer
 from mojito import *
 
-# 0.26.1.0.dev2026011405 (1796fa39)
+from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu.host import DeviceContext
+from std.math import ceildiv
 
-from gpu import block_dim, block_idx, thread_idx
-from gpu.host import DeviceContext
-from math import ceildiv
-
-fn init_kernel_gpu[
+def init_kernel_gpu[
     dtype: DType
 ](
+    ctx: DeviceContext,
     Nx: Int,
     inout_array: UnsafePointer[Scalar[dtype], MutAnyOrigin]
 ):
-    var i = block_idx.x * block_dim.x + thread_idx.x
-    if i < UInt(Nx):
+    var i: Int = block_idx.x * block_dim.x + thread_idx.x
+    if i < Nx:
         inout_array[i] = Scalar[dtype](i)
 
 
-fn init_kernel_cpu[
+def init_kernel_cpu[
     dtype: DType
 ](
     Nx: Int,
@@ -29,7 +28,7 @@ fn init_kernel_cpu[
         inout_array[i] = Scalar[dtype](i)
 
 
-def test_cpu_arrays():
+def test_cpu_arrays() raises:
     comptime backend = "cpu"
     comptime Nx = 5
     comptime dtype = DType.float32
@@ -51,7 +50,7 @@ def test_cpu_arrays():
         assert_equal(mj_fill[i], -1)
 
 
-def test_cpu_init():
+def test_cpu_init() raises:
     comptime backend = "cpu"
     comptime Nx = 5
     comptime dtype = DType.float32
@@ -65,7 +64,7 @@ def test_cpu_init():
         assert_equal(mj_arr[i], Scalar[dtype](i))
 
 
-def test_gpu_arrays():
+def test_gpu_arrays() raises:
     comptime backend = "gpu"
     comptime Nx = 5
     comptime dtype = DType.float32
@@ -88,7 +87,7 @@ def test_gpu_arrays():
         assert_equal(mj_fill[i], -1.0)
 
 
-def test_gpu_kernel():
+def test_gpu_kernel() raises:
     comptime backend = "gpu"
     comptime Nx = 5
     comptime dtype = DType.float32
@@ -113,7 +112,7 @@ def test_gpu_kernel():
         assert_equal(mj_arr[i], Scalar[dtype](i))
 
 
-def test_3D_gpu_arrays():
+def test_3D_gpu_arrays() raises:
     comptime backend = "gpu"
     comptime Nx = 2
     comptime Ny = 3
@@ -136,7 +135,7 @@ def test_3D_gpu_arrays():
                 assert_equal(mj_arr[i, j, k], Scalar[dtype](i * Ny * Nz + j * Nz + k))
 
 
-def test_cpu_copy_functions():
+def test_cpu_copy_functions() raises:
     comptime backend = "cpu"
     comptime Nx = 5
     comptime dtype = DType.float32
@@ -157,7 +156,7 @@ def test_cpu_copy_functions():
         assert_equal(mj_arr[i], 3.0)
 
 
-def test_gpu_copy_to_host():
+def test_gpu_copy_to_host() raises:
     comptime backend = "gpu"
     comptime Nx = 5
     comptime dtype = DType.float32
@@ -180,7 +179,7 @@ def test_gpu_copy_to_host():
     assert_equal(dev_arr._on_host, False)
 
 
-def test_gpu_copy_to_device():
+def test_gpu_copy_to_device() raises:
     comptime backend = "gpu"
     comptime Nx = 5
     comptime dtype = DType.float32
@@ -208,20 +207,20 @@ def test_gpu_copy_to_device():
         assert_equal(host_arr[i], Scalar[dtype](i))
 
 # Function bodies to test parallel_for (1, 2, 3 args)
-fn fill_body(
+def fill_body(
     i: Int,
     a: array_ref[DType.float32, 10],
 ) -> None:
     a[i] = Float32(i)
 
-fn copy_body(
+def copy_body(
     i: Int,
     a: array_ref[DType.float32, 10],
     b: array_ref[DType.float32, 10],
 ) -> None:
     a[i] = b[i]
 
-fn axpy_body(
+def axpy_body(
     i: Int,
     alpha: Float32,
     x: array_ref[DType.float32, 10],
@@ -230,7 +229,7 @@ fn axpy_body(
     y[i] = alpha * x[i] + y[i]
 
 
-def test_cpu_parallel_for_1_arg():
+def test_cpu_parallel_for_1_arg() raises:
     comptime backend = "cpu"
     comptime N = 10
     comptime dtype = DType.float32
@@ -244,7 +243,7 @@ def test_cpu_parallel_for_1_arg():
         assert_equal(a[i], Scalar[dtype](i))
 
 
-def test_gpu_parallel_for_1_arg():
+def test_gpu_parallel_for_1_arg() raises:
     comptime backend = "gpu"
     comptime N = 10
     comptime dtype = DType.float32
@@ -260,7 +259,7 @@ def test_gpu_parallel_for_1_arg():
         assert_equal(a[i], Scalar[dtype](i))
 
 
-def test_cpu_parallel_for_2_args():
+def test_cpu_parallel_for_2_args() raises:
     comptime backend = "cpu"
     comptime N = 10
     comptime dtype = DType.float32
@@ -275,7 +274,7 @@ def test_cpu_parallel_for_2_args():
         assert_equal(a[i], b[i])
 
 
-def test_gpu_parallel_for_2_args():
+def test_gpu_parallel_for_2_args() raises:
     comptime backend = "gpu"
     comptime N = 10
     comptime dtype = DType.float32
@@ -294,7 +293,7 @@ def test_gpu_parallel_for_2_args():
         assert_equal(a[i], b[i])
 
 
-def test_cpu_parallel_for_3_args():
+def test_cpu_parallel_for_3_args() raises:
     comptime backend = "cpu"
     comptime N = 10
     comptime dtype = DType.float32
@@ -311,7 +310,7 @@ def test_cpu_parallel_for_3_args():
         assert_equal(y[i], 7.0)
 
 
-def test_gpu_parallel_for_3_args():
+def test_gpu_parallel_for_3_args() raises:
     comptime backend = "gpu"
     comptime N = 10
     comptime dtype = DType.float32
@@ -331,14 +330,14 @@ def test_gpu_parallel_for_3_args():
         assert_equal(y[i], 7.0)
 
 
-fn body(
+def body(
     i: Int,
     a: array_ref[DType.float32, 10],
     b: array_ref[DType.float32, 10]
 ) -> Float32:
     return (a[i] * b[i])
 
-def test_gpu_parallel_reduce_2_args():
+def test_gpu_parallel_reduce_2_args() raises:
     comptime backend = "gpu"
     comptime N = 10
     comptime dtype = DType.float32
@@ -354,4 +353,7 @@ def test_gpu_parallel_reduce_2_args():
 
 
 def main():
-    TestSuite.discover_tests[__functions_in_module()]().run()
+    try:
+        TestSuite.discover_tests[__functions_in_module()]().run()
+    except e:
+        print("\nre-raised error:", e)

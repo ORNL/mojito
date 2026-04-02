@@ -1,11 +1,11 @@
-from gpu.host import DeviceContext
-from gpu import block_dim, block_idx, thread_idx, barrier
-from builtin.device_passable import DevicePassable
+from std.gpu.host import DeviceContext
+from std.gpu import block_dim, block_idx, thread_idx, barrier
+from std.builtin.device_passable import DevicePassable
 
-from memory import stack_allocation
-from collections import Optional
-from algorithm import parallelize, reduction
-from math import ceildiv
+from std.memory import stack_allocation
+from std.collections import Optional
+from std.algorithm import parallelize, reduction
+from std.math import ceildiv
 
 # GPU-passable view of mojito array, avoids host-only fields
 struct array_ref[
@@ -18,14 +18,14 @@ struct array_ref[
     var _data: UnsafePointer[Scalar[Self.dtype], MutAnyOrigin]
     comptime device_type = Self
 
-    fn __init__(
+    def __init__(
         out self,
         data: UnsafePointer[Scalar[Self.dtype], MutAnyOrigin],
     ):
         self._data = data
 
     # Followed syntax from https://github.com/modular/modular/issues/6145
-    fn _to_device_type[
+    def _to_device_type[
         mut_origin: Origin[mut=True]
     ](
         self,
@@ -34,26 +34,26 @@ struct array_ref[
         target.bitcast[Self]().init_pointee_copy(self)
 
     @staticmethod
-    fn get_type_name() -> String:
+    def get_type_name() -> String:
         return "MojitoArrayView"
 
     @staticmethod
-    fn get_device_type_name() -> String:
+    def get_device_type_name() -> String:
         return "MojitoArrayView"
 
     # Getters and setters for GPU kernel array manipulation
-    fn __getitem__(self, x: Int) -> Scalar[Self.dtype]:
+    def __getitem__(self, x: Int) -> Scalar[Self.dtype]:
         return self._data[x]
-    fn __getitem__(self, x: Int, y: Int) -> Scalar[Self.dtype]:
+    def __getitem__(self, x: Int, y: Int) -> Scalar[Self.dtype]:
         return self._data[x * Self.Ny + y]
-    fn __getitem__(self, x: Int, y: Int, z: Int) -> Scalar[Self.dtype]:
+    def __getitem__(self, x: Int, y: Int, z: Int) -> Scalar[Self.dtype]:
         return self._data[x * Self.Ny * Self.Nz + y * Self.Nz + z]
 
-    fn __setitem__(self, x: Int, value: Scalar[Self.dtype]):
+    def __setitem__(self, x: Int, value: Scalar[Self.dtype]):
         self._data[x] = value
-    fn __setitem__(self, x: Int, y: Int, value: Scalar[Self.dtype]):
+    def __setitem__(self, x: Int, y: Int, value: Scalar[Self.dtype]):
         self._data[x * Self.Ny + y] = value
-    fn __setitem__(self, x: Int, y: Int, z: Int, value: Scalar[Self.dtype]):
+    def __setitem__(self, x: Int, y: Int, z: Int, value: Scalar[Self.dtype]):
         self._data[x * Self.Ny * Self.Nz + y * Self.Nz + z] = value
 
 
@@ -71,7 +71,7 @@ struct array[
     var _owned: Bool
 
     # GPU array constructor (no fill value)
-    fn __init__(
+    def __init__(
         out self,
         ctx: DeviceContext
     ) raises:
@@ -82,7 +82,7 @@ struct array[
         self._owned = True
 
     # GPU array constructor (with fill value)
-    fn __init__(
+    def __init__(
         out self,
         ctx: DeviceContext,
         filler: Scalar[Self.dtype]
@@ -95,7 +95,7 @@ struct array[
         self._owned = True
 
     # CPU array constructor (no fill value)
-    fn __init__(out self) raises:
+    def __init__(out self) raises:
         self._ctx = None
         var list = List[Scalar[Self.dtype]](unsafe_uninit_length=Self._N)
         self._data = list.steal_data()
@@ -103,7 +103,7 @@ struct array[
         self._owned = True
 
     # CPU array constructor (with fill value)
-    fn __init__(out self, filler: Scalar[Self.dtype]) raises:
+    def __init__(out self, filler: Scalar[Self.dtype]) raises:
         self._ctx = None
         var list = List[Scalar[Self.dtype]](length=Self._N, fill=filler)
         self._data = list.steal_data()
@@ -111,7 +111,7 @@ struct array[
         self._owned = True
 
     # Internal constructor for building copy results (used by Mojito.copy_to_*)
-    fn __init__(
+    def __init__(
         out self,
         ctx: Optional[DeviceContext],
         data: UnsafePointer[Scalar[Self.dtype], MutAnyOrigin],
@@ -124,31 +124,31 @@ struct array[
         self._owned = _owned
 
     # 1D indexing
-    fn __getitem__(ref self, x: Int) raises -> Scalar[Self.dtype]:
+    def __getitem__(ref self, x: Int) raises -> Scalar[Self.dtype]:
         return self._data[x]
 
     # 2D indexing
-    fn __getitem__(ref self, x: Int, y: Int) raises -> Scalar[Self.dtype]:
+    def __getitem__(ref self, x: Int, y: Int) raises -> Scalar[Self.dtype]:
         return self._data[x * Self.Ny + y]
 
     # 3D indexing
-    fn __getitem__(ref self, x: Int, y: Int, z: Int) raises -> Scalar[Self.dtype]:
+    def __getitem__(ref self, x: Int, y: Int, z: Int) raises -> Scalar[Self.dtype]:
         return self._data[x * Self.Ny * Self.Nz + y * Self.Nz + z]
 
     # 1D setitem
-    fn __setitem__(mut self, x: Int, value: Scalar[Self.dtype]) raises:
+    def __setitem__(mut self, x: Int, value: Scalar[Self.dtype]) raises:
         self._data[x] = value
 
     # 2D setitem
-    fn __setitem__(mut self, x: Int, y: Int, value: Scalar[Self.dtype]) raises:
+    def __setitem__(mut self, x: Int, y: Int, value: Scalar[Self.dtype]) raises:
         self._data[x * Self.Ny + y] = value
 
     # 3D setitem
-    fn __setitem__(mut self, x: Int, y: Int, z: Int, value: Scalar[Self.dtype]) raises:
+    def __setitem__(mut self, x: Int, y: Int, z: Int, value: Scalar[Self.dtype]) raises:
         self._data[x * Self.Ny * Self.Nz + y * Self.Nz + z] = value
 
     # Move device buffer to host for GPU backend, does nothing in other cases
-    fn to_host(mut self) raises:
+    def to_host(mut self) raises:
         if self._ctx and not self._on_host:
             var h_buff = self._ctx.value().enqueue_create_host_buffer[Self.dtype](Self._N)
             h_buff.enqueue_copy_from(self._data)
@@ -156,27 +156,26 @@ struct array[
             self._on_host = True
 
     # Move host buffer to device for GPU backend, does nothing in other cases
-    fn to_device(mut self) raises:
+    def to_device(mut self) raises:
         if self._ctx and self._on_host:
             var d_buff = self._ctx.value().enqueue_create_buffer[Self.dtype](Self._N)
             d_buff.enqueue_copy_from(self._data)
             self._data = d_buff.take_ptr()
             self._on_host = False
 
-    fn __del__(deinit self):
+    def __del__(deinit self):
         if self._owned:
-            @parameter
-            if Self.backend == "cpu":
+            comptime if Self.backend == "cpu":
                 self._data.free()
             # GPU data cleanup: TODO ??
 
     # DevicePassable requirements
     comptime device_type = array_ref[Self.dtype, Self.Nx, Self.Ny, Self.Nz]
 
-    fn _view(self) -> array_ref[Self.dtype, Self.Nx, Self.Ny, Self.Nz]:
+    def _view(self) -> array_ref[Self.dtype, Self.Nx, Self.Ny, Self.Nz]:
         return array_ref[Self.dtype, Self.Nx, Self.Ny, Self.Nz](self._data)
 
-    fn _to_device_type[
+    def _to_device_type[
         mut_origin: Origin[mut=True]
     ](
         self,
@@ -186,80 +185,74 @@ struct array[
             .init_pointee_copy(self._view())
 
     @staticmethod
-    fn get_type_name() -> String:
+    def get_type_name() -> String:
         return "MojitoArray"
 
     @staticmethod
-    fn get_device_type_name() -> String:
+    def get_device_type_name() -> String:
         return "MojitoArrayView"
 
 
 struct Mojito[backend: String]():
     var _ctx: Optional[DeviceContext]
 
-    fn __init__(out self) raises:
-        @parameter
-        if Self.backend == "gpu":
+    def __init__(out self) raises:
+        comptime if Self.backend == "gpu":
             self._ctx = DeviceContext()
         else:
             self._ctx = None
 
-    fn get_ctx(self) raises -> DeviceContext:
-        @parameter
-        if Self.backend != "gpu":
+    def get_ctx(self) raises -> DeviceContext:
+        comptime if Self.backend != "gpu":
             raise Error("DeviceContext is only available for GPU backend")
         return self._ctx.value()
 
-    fn empty[
+    def empty[
         type: DType,
         Nx: Int,
         Ny: Int = 1,
         Nz: Int = 1
     ](mut self) raises -> array[Self.backend, type, Nx, Ny, Nz]:
-        @parameter
-        if Self.backend == "gpu":
+        comptime if Self.backend == "gpu":
             return array[Self.backend, type, Nx, Ny, Nz](self._ctx.value())
         else:
             return array[Self.backend, type, Nx, Ny, Nz]()
 
-    fn zeros[
+    def zeros[
         type: DType,
         Nx: Int,
         Ny: Int = 1,
         Nz: Int = 1
     ](mut self) raises -> array[Self.backend, type, Nx, Ny, Nz]:
-        @parameter
-        if Self.backend == "gpu":
+        comptime if Self.backend == "gpu":
             return array[Self.backend, type, Nx, Ny, Nz](self._ctx.value(), Scalar[type](0))
         else:
             return array[Self.backend, type, Nx, Ny, Nz](Scalar[type](0))
 
-    fn ones[
+    def ones[
         type: DType,
         Nx: Int,
         Ny: Int = 1,
         Nz: Int = 1
     ](mut self) raises -> array[Self.backend, type, Nx, Ny, Nz]:
-        @parameter
-        if Self.backend == "gpu":
+        comptime if Self.backend == "gpu":
             return array[Self.backend, type, Nx, Ny, Nz](self._ctx.value(), Scalar[type](1))
         else:
             return array[Self.backend, type, Nx, Ny, Nz](Scalar[type](1))
 
-    fn fill[
+    def fill[
         type: DType,
         Nx: Int,
         Ny: Int = 1,
         Nz: Int = 1
     ](mut self, filler: Scalar[type]) raises -> array[Self.backend, type, Nx, Ny, Nz]:
-        @parameter
-        if Self.backend == "gpu":
+        comptime if Self.backend == "gpu":
             return array[Self.backend, type, Nx, Ny, Nz](self._ctx.value(), Scalar[type](filler))
         else:
             return array[Self.backend, type, Nx, Ny, Nz](filler)
 
     # Synchronize DeviceContext for GPU backend
-    fn sync(mut self) raises:
+    def sync(mut self) raises:
         if self._ctx:
             self._ctx.value().synchronize()
 
@@ -267,7 +260,7 @@ struct Mojito[backend: String]():
     # Return a new array with the data in host memory, leaving src unchanged
     # GPU + src on device: allocates a new host buffer and copies the data
     # GPU + src already on host, or CPU: returns a shallow copy
-    fn copy_to_host[
+    def copy_to_host[
         type: DType,
         Nx: Int,
         Ny: Int = 1,
@@ -287,7 +280,7 @@ struct Mojito[backend: String]():
     # Return a new array with the data in device memory, leaving src unchanged
     # GPU + src on host: allocates a new device buffer and copies the data
     # GPU + src already on device, or CPU: returns a shallow copy
-    fn copy_to_device[
+    def copy_to_device[
         type: DType,
         Nx: Int,
         Ny: Int = 1,
@@ -304,14 +297,13 @@ struct Mojito[backend: String]():
             return A(src._ctx, src._data, src._on_host, False)
 
     # parallel_for overloads for 1, 2, and 3 arguments
-    fn parallel_for[
+    def parallel_for[
         N: Int,
         V1: DevicePassable,
-        func: fn(i: Int, v1: V1.device_type) -> None,
+        func: def(i: Int, v1: V1.device_type) -> None,
     ](mut self, v1: V1) raises:
-        @parameter
-        if Self.backend == "gpu":
-            fn kernel(v1: V1.device_type):
+        comptime if Self.backend == "gpu":
+            def kernel(v1: V1.device_type):
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
                 if i < N:
                     func(i, v1)
@@ -331,19 +323,18 @@ struct Mojito[backend: String]():
             # _to_device_type() takes a void pointer, so we need to cast
             v1._to_device_type(dv.bitcast[NoneType]())
 
-            fn wrapper(i: Int) capturing -> None:
+            def wrapper(i: Int) capturing -> None:
                 func(i, dv[0])
             parallelize[wrapper](N)
 
-    fn parallel_for[
+    def parallel_for[
         N: Int,
         V1: DevicePassable,
         V2: DevicePassable,
-        func: fn(i: Int, v1: V1.device_type, v2: V2.device_type) -> None,
+        func: def(i: Int, v1: V1.device_type, v2: V2.device_type) -> None,
     ](mut self, v1: V1, v2: V2) raises:
-        @parameter
-        if Self.backend == "gpu":
-            fn kernel(v1: V1.device_type, v2: V2.device_type):
+        comptime if Self.backend == "gpu":
+            def kernel(v1: V1.device_type, v2: V2.device_type):
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
                 if i < N:
                     func(i, v1, v2)
@@ -362,20 +353,20 @@ struct Mojito[backend: String]():
             v1._to_device_type(dv1.bitcast[NoneType]())
             v2._to_device_type(dv2.bitcast[NoneType]())
 
-            fn wrapper(i: Int) capturing -> None:
+            def wrapper(i: Int) capturing -> None:
                 func(i, dv1[0], dv2[0])
             parallelize[wrapper](N)
 
-    fn parallel_for[
+    def parallel_for[
         N: Int,
         V1: DevicePassable,
         V2: DevicePassable,
         V3: DevicePassable,
-        func: fn(i: Int, v1: V1.device_type, v2: V2.device_type, v3: V3.device_type) -> None,
+        func: def(i: Int, v1: V1.device_type, v2: V2.device_type, v3: V3.device_type) -> None,
     ](mut self, v1: V1, v2: V2, v3: V3) raises:
-        @parameter
-        if Self.backend == "gpu":
-            fn kernel(v1: V1.device_type, v2: V2.device_type, v3: V3.device_type):
+        
+        comptime if Self.backend == "gpu":
+            def kernel(v1: V1.device_type, v2: V2.device_type, v3: V3.device_type):
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
                 if i < N:
                     func(i, v1, v2, v3)
@@ -396,26 +387,26 @@ struct Mojito[backend: String]():
             v2._to_device_type(dv2.bitcast[NoneType]())
             v3._to_device_type(dv3.bitcast[NoneType]())
 
-            fn wrapper(i: Int) capturing -> None:
+            def wrapper(i: Int) capturing -> None:
                 func(i, dv1[0], dv2[0], dv3[0])
             parallelize[wrapper](N)
 
 
-    fn parallel_reduce[
+    def parallel_reduce[
         N: Int,
         V1: DevicePassable,
         V2: DevicePassable,
         dtype: DType,
-        func: fn(i: Int, v1: V1.device_type, v2: V2.device_type) -> Scalar[dtype],
+        func: def(i: Int, v1: V1.device_type, v2: V2.device_type) -> Scalar[dtype],
     ](mut self, v1: V1, v2: V2) raises -> Scalar[dtype]:
         comptime num_threads = 256
         comptime num_blocks = ceildiv(N, num_threads)
         var res: Scalar[dtype] = 0
-        @parameter
-        if Self.backend == "gpu":
+        
+        comptime if Self.backend == "gpu":
             partial = self._ctx.value().enqueue_create_buffer[dtype](num_blocks)
 
-            fn kernel(
+            def kernel(
                 v1: V1.device_type,
                 v2: V2.device_type,
                 partial: UnsafePointer[Scalar[dtype], MutAnyOrigin]
