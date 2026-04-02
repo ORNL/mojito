@@ -9,7 +9,6 @@ from std.math import ceildiv
 def init_kernel_gpu[
     dtype: DType
 ](
-    ctx: DeviceContext,
     Nx: Int,
     inout_array: UnsafePointer[Scalar[dtype], MutAnyOrigin]
 ):
@@ -97,7 +96,8 @@ def test_gpu_kernel() raises:
 
     ctx = mj.get_ctx()
     comptime kernel = init_kernel_gpu[dtype]
-    ctx.enqueue_function[kernel, kernel](
+    var compiled_func = ctx.compile_function[kernel, kernel]()
+    ctx.enqueue_function(compiled_func,
         Nx,
         mj_arr._data,
         grid_dim=ceildiv(Nx, 256),
