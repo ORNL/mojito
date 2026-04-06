@@ -5,6 +5,7 @@ from mojito import *
 from std.gpu import block_dim, block_idx, thread_idx
 from std.gpu.host import DeviceContext
 from std.math import ceildiv
+from std.sys import has_accelerator
 
 def init_kernel_gpu[
     dtype: DType
@@ -353,7 +354,20 @@ def test_gpu_parallel_reduce_2_args() raises:
 
 
 def main():
-    try:
-        TestSuite.discover_tests[__functions_in_module()]().run()
-    except e:
-        print("\nre-raised error:", e)
+    comptime if not has_accelerator():
+        var suite = TestSuite(cli_args=List[StaticString]())
+        suite.test[test_cpu_arrays]()
+        suite.test[test_cpu_init]()
+        suite.test[test_cpu_copy_functions]()
+        suite.test[test_cpu_parallel_for_1_arg]()
+        suite.test[test_cpu_parallel_for_2_args]()
+        suite.test[test_cpu_parallel_for_3_args]()
+        try:
+            suite^.run()
+        except e:
+            print("\nre-raised error:", e)
+    else:
+        try:
+            TestSuite.discover_tests[__functions_in_module()]().run()
+        except e:
+            print("\nre-raised error:", e)
