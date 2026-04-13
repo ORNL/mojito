@@ -300,7 +300,7 @@ struct Mojito[backend: String]():
     def parallel_for[
         N: Int,
         V1: DevicePassable,
-        func: def(i: Int, v1: V1.device_type) -> None,
+        func: def(i: Int, v1: V1.device_type) thin -> None,
     ](mut self, v1: V1) raises:
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type):
@@ -331,7 +331,7 @@ struct Mojito[backend: String]():
         N: Int,
         V1: DevicePassable,
         V2: DevicePassable,
-        func: def(i: Int, v1: V1.device_type, v2: V2.device_type) -> None,
+        func: def(i: Int, v1: V1.device_type, v2: V2.device_type) thin -> None,
     ](mut self, v1: V1, v2: V2) raises:
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type, v2: V2.device_type):
@@ -362,9 +362,9 @@ struct Mojito[backend: String]():
         V1: DevicePassable,
         V2: DevicePassable,
         V3: DevicePassable,
-        func: def(i: Int, v1: V1.device_type, v2: V2.device_type, v3: V3.device_type) -> None,
+        func: def(i: Int, v1: V1.device_type, v2: V2.device_type, v3: V3.device_type) thin -> None,
     ](mut self, v1: V1, v2: V2, v3: V3) raises:
-        
+
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type, v2: V2.device_type, v3: V3.device_type):
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
@@ -397,12 +397,12 @@ struct Mojito[backend: String]():
         V1: DevicePassable,
         V2: DevicePassable,
         dtype: DType,
-        func: def(i: Int, v1: V1.device_type, v2: V2.device_type) -> Scalar[dtype],
+        func: def(i: Int, v1: V1.device_type, v2: V2.device_type) thin -> Scalar[dtype],
     ](mut self, v1: V1, v2: V2) raises -> Scalar[dtype]:
         comptime num_threads = 256
         comptime num_blocks = ceildiv(N, num_threads)
         var res: Scalar[dtype] = 0
-        
+
         comptime if Self.backend == "gpu":
             partial = self._ctx.value().enqueue_create_buffer[dtype](num_blocks)
 
@@ -420,6 +420,8 @@ struct Mojito[backend: String]():
                 var i_local = Int(thread_idx.x)
                 if i < N:
                     shared[thread_idx.x] = func(i, v1, v2)
+                else:
+                    shared[thread_idx.x] = 0
                 barrier()
 
                 var offset = num_threads // 2
