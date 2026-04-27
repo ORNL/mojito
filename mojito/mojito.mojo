@@ -7,6 +7,8 @@ from std.collections import Optional
 from std.algorithm import parallelize, reduction
 from std.math import ceildiv
 
+comptime TBSize = 512
+
 # GPU-passable view of mojito array, avoids host-only fields
 struct array_ref[
     dtype: DType,
@@ -61,8 +63,8 @@ struct array[
     backend: String,
     dtype: DType,
     Nx: Int,
-    Ny: Int,
-    Nz: Int
+    Ny: Int = 1,
+    Nz: Int = 1,
 ](DevicePassable, ImplicitlyCopyable):
     comptime _N = Self.Nx * Self.Ny * Self.Nz
     var _ctx : Optional[DeviceContext]
@@ -298,20 +300,20 @@ struct Mojito[backend: String]():
 
     # parallel_for overloads for 1, 2, and 3 arguments
     def parallel_for[
-        N: Int,
+        Nx: Int,
         V1: DevicePassable,
         func: def(i: Int, v1: V1.device_type) thin -> None,
     ](mut self, v1: V1) raises:
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type):
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
-                if i < N:
+                if i < Nx:
                     func(i, v1)
 
             self._ctx.value().enqueue_function[kernel, kernel](
                 v1,
-                grid_dim=ceildiv(N, 256),
-                block_dim=256,
+                grid_dim = (ceildiv(Nx, TBSize)),
+                block_dim = TBSize
             )
             self._ctx.value().synchronize()
         # CPU path:
@@ -325,10 +327,10 @@ struct Mojito[backend: String]():
 
             def wrapper(i: Int) capturing -> None:
                 func(i, dv[0])
-            parallelize[wrapper](N)
+            parallelize[wrapper](Nx)
 
     def parallel_for[
-        N: Int,
+        Nx: Int,
         V1: DevicePassable,
         V2: DevicePassable,
         func: def(i: Int, v1: V1.device_type, v2: V2.device_type) thin -> None,
@@ -336,13 +338,13 @@ struct Mojito[backend: String]():
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type, v2: V2.device_type):
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
-                if i < N:
+                if i < Nx:
                     func(i, v1, v2)
 
             self._ctx.value().enqueue_function[kernel, kernel](
                 v1, v2,
-                grid_dim=ceildiv(N, 256),
-                block_dim=256,
+                grid_dim = (ceildiv(Nx, TBSize)),
+                block_dim = TBSize
             )
             self._ctx.value().synchronize()
         # CPU path:
@@ -355,10 +357,10 @@ struct Mojito[backend: String]():
 
             def wrapper(i: Int) capturing -> None:
                 func(i, dv1[0], dv2[0])
-            parallelize[wrapper](N)
+            parallelize[wrapper](Nx)
 
     def parallel_for[
-        N: Int,
+        Nx: Int,
         V1: DevicePassable,
         V2: DevicePassable,
         V3: DevicePassable,
@@ -368,13 +370,13 @@ struct Mojito[backend: String]():
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type, v2: V2.device_type, v3: V3.device_type):
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
-                if i < N:
+                if i < Nx:
                     func(i, v1, v2, v3)
 
             self._ctx.value().enqueue_function[kernel, kernel](
                 v1, v2, v3,
-                grid_dim=ceildiv(N, 256),
-                block_dim=256,
+                grid_dim = (ceildiv(Nx, TBSize)),
+                block_dim = TBSize
             )
             self._ctx.value().synchronize()
         # CPU path:
@@ -389,7 +391,134 @@ struct Mojito[backend: String]():
 
             def wrapper(i: Int) capturing -> None:
                 func(i, dv1[0], dv2[0], dv3[0])
-            parallelize[wrapper](N)
+            parallelize[wrapper](Nx)
+
+
+    def parallel_for[
+        Nx: Int,
+        V1: DevicePassable,
+        V2: DevicePassable,
+        V3: DevicePassable,
+        V4: DevicePassable,
+        func: def(i: Int, v1: V1.device_type, v2: V2.device_type, v3: V3.device_type, v4: V4.device_type) thin -> None,
+    ](mut self, v1: V1, v2: V2, v3: V3, v4: V4) raises:
+        comptime if Self.backend == "gpu":
+            def kernel(v1: V1.device_type, v2: V2.device_type, v3: V3.device_type, v4: V4.device_type):
+                var i = Int(block_idx.x * block_dim.x + thread_idx.x)
+                if i < Nx:
+                    func(i, v1, v2, v3, v4)
+            self._ctx.value().enqueue_function[kernel, kernel](
+                v1, v2, v3, v4,
+                grid_dim = (ceildiv(Nx, TBSize)),
+                block_dim = TBSize
+            )
+            self._ctx.value().synchronize()
+        else:
+            var dv1 = stack_allocation[1, V1.device_type]()
+            var dv2 = stack_allocation[1, V2.device_type]()
+            var dv3 = stack_allocation[1, V3.device_type]()
+            var dv4 = stack_allocation[1, V4.device_type]()
+            v1._to_device_type(dv1.bitcast[NoneType]())
+            v2._to_device_type(dv2.bitcast[NoneType]())
+            v3._to_device_type(dv3.bitcast[NoneType]())
+            v4._to_device_type(dv4.bitcast[NoneType]())
+            def wrapper(i: Int) capturing -> None:
+                func(i, dv1[0], dv2[0], dv3[0], dv4[0])
+            parallelize[wrapper](Nx)
+
+    def parallel_for[
+        Nx: Int,
+        V1: DevicePassable,
+        V2: DevicePassable,
+        V3: DevicePassable,
+        V4: DevicePassable,
+        V5: DevicePassable,
+        func: def(i: Int, v1: V1.device_type, v2: V2.device_type, v3: V3.device_type, v4: V4.device_type, v5: V5.device_type) thin -> None,
+    ](mut self, v1: V1, v2: V2, v3: V3, v4: V4, v5: V5) raises:
+        comptime if Self.backend == "gpu":
+            def kernel(v1: V1.device_type, v2: V2.device_type, v3: V3.device_type, v4: V4.device_type, v5: V5.device_type):
+                var i = Int(block_idx.x * block_dim.x + thread_idx.x)
+                if i < Nx:
+                    func(i, v1, v2, v3, v4, v5)
+            self._ctx.value().enqueue_function[kernel, kernel](
+                v1, v2, v3, v4, v5,
+                grid_dim = (ceildiv(Nx, TBSize)),
+                block_dim = TBSize
+            )
+            self._ctx.value().synchronize()
+        else:
+            var dv1 = stack_allocation[1, V1.device_type]()
+            var dv2 = stack_allocation[1, V2.device_type]()
+            var dv3 = stack_allocation[1, V3.device_type]()
+            var dv4 = stack_allocation[1, V4.device_type]()
+            var dv5 = stack_allocation[1, V5.device_type]()
+            v1._to_device_type(dv1.bitcast[NoneType]())
+            v2._to_device_type(dv2.bitcast[NoneType]())
+            v3._to_device_type(dv3.bitcast[NoneType]())
+            v4._to_device_type(dv4.bitcast[NoneType]())
+            v5._to_device_type(dv5.bitcast[NoneType]())
+            def wrapper(i: Int) capturing -> None:
+                func(i, dv1[0], dv2[0], dv3[0], dv4[0], dv5[0])
+            parallelize[wrapper](Nx)
+
+    # 3D overloads
+    # iz (fastest in row-major) = thread_idx.x
+    def parallel_for[
+        Nx: Int, Ny: Int, Nz: Int,
+        V1: DevicePassable,
+        func: def(ix: Int, iy: Int, iz: Int, v1: V1.device_type) thin -> None,
+    ](mut self, v1: V1) raises:
+        comptime if Self.backend == "gpu":
+            def kernel(v1: V1.device_type):
+                var iz = Int(block_idx.x * block_dim.x + thread_idx.x)
+                var iy = Int(block_idx.y * block_dim.y + thread_idx.y)
+                var ix = Int(block_idx.z * block_dim.z + thread_idx.z)
+                if ix < Nx and iy < Ny and iz < Nz:
+                    func(ix, iy, iz, v1)
+            self._ctx.value().enqueue_function[kernel, kernel](
+                v1,
+                grid_dim  = (ceildiv(Nz, TBSize), Ny, Nx),
+                block_dim = (TBSize, 1, 1)
+            )
+            self._ctx.value().synchronize()
+        else:
+            var dv1 = stack_allocation[1, V1.device_type]()
+            v1._to_device_type(dv1.bitcast[NoneType]())
+            def wrapper(ix: Int) capturing -> None:
+                for iy in range(Ny):
+                    for iz in range(Nz):
+                        func(ix, iy, iz, dv1[0])
+            parallelize[wrapper](Nx)
+
+    def parallel_for[
+        Nx: Int, Ny: Int, Nz: Int,
+        V1: DevicePassable,
+        V2: DevicePassable,
+        func: def(ix: Int, iy: Int, iz: Int, v1: V1.device_type, v2: V2.device_type) thin -> None,
+    ](mut self, v1: V1, v2: V2) raises:
+        comptime if Self.backend == "gpu":
+            def kernel(v1: V1.device_type, v2: V2.device_type):
+                var iz = Int(block_idx.x * block_dim.x + thread_idx.x)
+                var iy = Int(block_idx.y * block_dim.y + thread_idx.y)
+                var ix = Int(block_idx.z * block_dim.z + thread_idx.z)
+                if ix < Nx and iy < Ny and iz < Nz:
+                    func(ix, iy, iz, v1, v2)
+            self._ctx.value().enqueue_function[kernel, kernel](
+                v1, v2,
+                grid_dim  = (ceildiv(Nz, TBSize), Ny, Nx),
+                block_dim = (TBSize, 1, 1)
+            )
+            self._ctx.value().synchronize()
+        else:
+            var dv1 = stack_allocation[1, V1.device_type]()
+            var dv2 = stack_allocation[1, V2.device_type]()
+            v1._to_device_type(dv1.bitcast[NoneType]())
+            v2._to_device_type(dv2.bitcast[NoneType]())
+            def wrapper(ix: Int) capturing -> None:
+                for iy in range(Ny):
+                    for iz in range(Nz):
+                        func(ix, iy, iz, dv1[0], dv2[0])
+            parallelize[wrapper](Nx)
 
 
     def parallel_reduce[
@@ -399,8 +528,7 @@ struct Mojito[backend: String]():
         dtype: DType,
         func: def(i: Int, v1: V1.device_type, v2: V2.device_type) thin -> Scalar[dtype],
     ](mut self, v1: V1, v2: V2) raises -> Scalar[dtype]:
-        comptime num_threads = 256
-        comptime num_blocks = ceildiv(N, num_threads)
+        comptime num_blocks = ceildiv(N, TBSize)
         var res: Scalar[dtype] = 0
 
         comptime if Self.backend == "gpu":
@@ -412,7 +540,7 @@ struct Mojito[backend: String]():
                 partial: UnsafePointer[Scalar[dtype], MutAnyOrigin]
             ):
                 var shared = stack_allocation[
-                    num_threads,
+                    TBSize,
                     Scalar[dtype],
                     address_space=AddressSpace.SHARED,
                 ]()
@@ -424,7 +552,7 @@ struct Mojito[backend: String]():
                     shared[thread_idx.x] = 0
                 barrier()
 
-                var offset = num_threads // 2
+                var offset = TBSize // 2
                 while offset > 0:
                     if i_local < offset:
                         shared[i_local] += shared[i_local + offset]
@@ -437,7 +565,7 @@ struct Mojito[backend: String]():
             self._ctx.value().enqueue_function[kernel, kernel](
                 v1, v2, partial,
                 grid_dim=num_blocks,
-                block_dim=num_threads
+                block_dim=TBSize
             )
             self._ctx.value().synchronize()
 
