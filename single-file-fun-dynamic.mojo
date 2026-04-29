@@ -74,9 +74,14 @@ def parallel_for[
 
 def main() raises:
 
-    ctx = DeviceContext()
-    var buf = ctx.enqueue_create_buffer[DType.float32](10)
-    buf.enqueue_fill(1.0)
-    a = array_ref[DType.float32, 10](buf.take_ptr())
+    with DeviceContext() as ctx:
+        var buf = ctx.enqueue_create_buffer[DType.float32](10)
+        buf.enqueue_fill(1.0)
+        # var a = array_ref[DType.float32, 10](buf.take_ptr())
+        var a = array_ref[DType.float32, 10](buf.unsafe_ptr())
 
-    parallel_for[10, func=fill_body](ctx, a)
+        parallel_for[10, func=fill_body](ctx, a)
+
+        with buf.map_to_host() as out_host:
+            print("out:", out_host)
+    
