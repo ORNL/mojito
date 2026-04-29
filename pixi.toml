@@ -2,7 +2,7 @@
 authors = ["Tatiana Melnichenko <tatianadehoff@gmail.com>", "William F Godoy <williamfgc@yahoo.com>"]
 channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
 name = "mojito"
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-arm64"]
 version = "0.1.0"
 
 [tasks]
