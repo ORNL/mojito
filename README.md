@@ -1,6 +1,8 @@
 # mojito
 
-[Mojo](https://www.modular.com/open-source/mojo) library to easily implement CPU/GPU performance portable `array`, `parallel_for` and `parallel_reduce` kernels. Mojo is a new programming language suporting performance portable low-level GPU kernel programming. mojito leverages Mojo by providing a high-level API to implement performance portable parallel CPU/GPU array and kernels by switching between backends.
+`mojito` is a [Mojo](https://www.modular.com/open-source/mojo) library to easily implement CPU/GPU performance portable `array`, `parallel_for` and `parallel_reduce` kernels. 
+
+Mojo is a new programming language suporting performance portable low-level GPU kernel programming. `mojito` leverages Mojo by providing a high-level API to implement performance portable parallel CPU/GPU array and kernels by switching between backends.
 
 ## Getting started
 
