@@ -1,0 +1,34 @@
+name: ci-cpu
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  linux:
+
+    strategy:
+      fail-fast: false
+      matrix:
+        jobname: [ mojito-threads ]
+        os: [ ubuntu-latest, ubuntu-24.04-arm ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: fabasoad/setup-mojo-action@v3
+
+      - name: Get Mojo version
+        run: |
+          pixi add modular
+          pixi run mojo --version
+
+      - name: Test threads
+        run: |
+          pixi run mojo test.mojo
