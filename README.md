@@ -1,8 +1,13 @@
-# mojito
+# mojito: simple performance portability in Mojo
+
+[![ci-cpu](https://github.com/ORNL/mojito/actions/workflows/ci-cpu.yaml/badge.svg)](https://github.com/ORNL/mojito/actions/workflows/ci-cpu.yaml)
+[![ci-gpu-NVIDIA](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-NVIDIA.yaml/badge.svg)](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-NVIDIA.yaml)
+[![ci-gpu-AMD](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-AMD.yaml/badge.svg)](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-AMD.yaml)
+
 
 `mojito` is a [Mojo](https://www.modular.com/open-source/mojo) library to easily implement CPU/GPU performance portable `array`, `parallel_for` and `parallel_reduce` kernels. 
 
-Mojo is a new programming language suporting performance portable low-level GPU kernel programming. `mojito` leverages Mojo by providing a high-level API to implement performance portable parallel CPU/GPU array and kernels by switching between backends.
+Mojo is a new programming language suporting performance portable low-level GPU kernel programming. `mojito` leverages Mojo by providing a high-level API to implement performance portable parallel CPU/GPU array memory and kernel launching by switching between `cpu` and the `gpu` [vendor backends supported by Mojo](https://docs.modular.com/max/packages/#gpu-compatibility).
 
 ## Getting started
 
