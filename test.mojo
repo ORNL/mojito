@@ -97,7 +97,7 @@ def test_gpu_kernel() raises:
 
     ctx = mj.get_ctx()
     comptime kernel = init_kernel_gpu[dtype]
-    var compiled_func = ctx.compile_function[kernel, kernel]()
+    var compiled_func = ctx.compile_function[kernel]()
     ctx.enqueue_function(compiled_func,
         Nx,
         mj_arr._data,
@@ -251,7 +251,7 @@ def test_gpu_parallel_for_1_arg() raises:
 
     mj = Mojito[backend]()
     a = mj.zeros[dtype, N]()
-    mj.parallel_for[N, func=fill_body](a)
+    mj.parallel_for[N, func=fill_body, num_threads=128](a)
 
     a.to_host()
     mj.sync()

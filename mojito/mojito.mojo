@@ -304,6 +304,7 @@ struct Mojito[backend: String]():
         Nx: Int,
         V1: DevicePassable,
         func: def(i: Int, v1: V1.device_type) thin -> None,
+        num_threads: Int = TBSize,
     ](mut self, v1: V1) raises:
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type):
@@ -311,10 +312,10 @@ struct Mojito[backend: String]():
                 if i < Nx:
                     func(i, v1)
 
-            self._ctx.value().enqueue_function[kernel, kernel](
+            self._ctx.value().enqueue_function[kernel](
                 v1,
-                grid_dim = (ceildiv(Nx, TBSize)),
-                block_dim = TBSize
+                grid_dim = (ceildiv(Nx, num_threads)),
+                block_dim = num_threads
             )
             self._ctx.value().synchronize()
         # CPU path:
@@ -335,6 +336,7 @@ struct Mojito[backend: String]():
         V1: DevicePassable,
         V2: DevicePassable,
         func: def(i: Int, v1: V1.device_type, v2: V2.device_type) thin -> None,
+        num_threads: Int = TBSize,
     ](mut self, v1: V1, v2: V2) raises:
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type, v2: V2.device_type):
@@ -342,10 +344,10 @@ struct Mojito[backend: String]():
                 if i < Nx:
                     func(i, v1, v2)
 
-            self._ctx.value().enqueue_function[kernel, kernel](
+            self._ctx.value().enqueue_function[kernel](
                 v1, v2,
-                grid_dim = (ceildiv(Nx, TBSize)),
-                block_dim = TBSize
+                grid_dim = (ceildiv(Nx, num_threads)),
+                block_dim = num_threads
             )
             self._ctx.value().synchronize()
         # CPU path:
@@ -366,6 +368,7 @@ struct Mojito[backend: String]():
         V2: DevicePassable,
         V3: DevicePassable,
         func: def(i: Int, v1: V1.device_type, v2: V2.device_type, v3: V3.device_type) thin -> None,
+        num_threads: Int = TBSize,
     ](mut self, v1: V1, v2: V2, v3: V3) raises:
 
         comptime if Self.backend == "gpu":
@@ -374,10 +377,10 @@ struct Mojito[backend: String]():
                 if i < Nx:
                     func(i, v1, v2, v3)
 
-            self._ctx.value().enqueue_function[kernel, kernel](
+            self._ctx.value().enqueue_function[kernel](
                 v1, v2, v3,
-                grid_dim = (ceildiv(Nx, TBSize)),
-                block_dim = TBSize
+                grid_dim = (ceildiv(Nx, num_threads)),
+                block_dim = num_threads
             )
             self._ctx.value().synchronize()
         # CPU path:
@@ -402,16 +405,17 @@ struct Mojito[backend: String]():
         V3: DevicePassable,
         V4: DevicePassable,
         func: def(i: Int, v1: V1.device_type, v2: V2.device_type, v3: V3.device_type, v4: V4.device_type) thin -> None,
+        num_threads: Int = TBSize,
     ](mut self, v1: V1, v2: V2, v3: V3, v4: V4) raises:
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type, v2: V2.device_type, v3: V3.device_type, v4: V4.device_type):
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
                 if i < Nx:
                     func(i, v1, v2, v3, v4)
-            self._ctx.value().enqueue_function[kernel, kernel](
+            self._ctx.value().enqueue_function[kernel](
                 v1, v2, v3, v4,
-                grid_dim = (ceildiv(Nx, TBSize)),
-                block_dim = TBSize
+                grid_dim = (ceildiv(Nx, num_threads)),
+                block_dim = num_threads
             )
             self._ctx.value().synchronize()
         else:
@@ -435,16 +439,17 @@ struct Mojito[backend: String]():
         V4: DevicePassable,
         V5: DevicePassable,
         func: def(i: Int, v1: V1.device_type, v2: V2.device_type, v3: V3.device_type, v4: V4.device_type, v5: V5.device_type) thin -> None,
+        num_threads: Int = TBSize,
     ](mut self, v1: V1, v2: V2, v3: V3, v4: V4, v5: V5) raises:
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type, v2: V2.device_type, v3: V3.device_type, v4: V4.device_type, v5: V5.device_type):
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
                 if i < Nx:
                     func(i, v1, v2, v3, v4, v5)
-            self._ctx.value().enqueue_function[kernel, kernel](
+            self._ctx.value().enqueue_function[kernel](
                 v1, v2, v3, v4, v5,
-                grid_dim = (ceildiv(Nx, TBSize)),
-                block_dim = TBSize
+                grid_dim = (ceildiv(Nx, num_threads)),
+                block_dim = num_threads
             )
             self._ctx.value().synchronize()
         else:
@@ -468,6 +473,7 @@ struct Mojito[backend: String]():
         Nx: Int, Ny: Int, Nz: Int,
         V1: DevicePassable,
         func: def(ix: Int, iy: Int, iz: Int, v1: V1.device_type) thin -> None,
+        num_threads: Int = TBSize,
     ](mut self, v1: V1) raises:
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type):
@@ -476,10 +482,10 @@ struct Mojito[backend: String]():
                 var ix = Int(block_idx.z * block_dim.z + thread_idx.z)
                 if ix < Nx and iy < Ny and iz < Nz:
                     func(ix, iy, iz, v1)
-            self._ctx.value().enqueue_function[kernel, kernel](
+            self._ctx.value().enqueue_function[kernel](
                 v1,
-                grid_dim  = (ceildiv(Nz, TBSize), Ny, Nx),
-                block_dim = (TBSize, 1, 1)
+                grid_dim  = (ceildiv(Nz, num_threads), Ny, Nx),
+                block_dim = (num_threads, 1, 1)
             )
             self._ctx.value().synchronize()
         else:
@@ -496,6 +502,7 @@ struct Mojito[backend: String]():
         V1: DevicePassable,
         V2: DevicePassable,
         func: def(ix: Int, iy: Int, iz: Int, v1: V1.device_type, v2: V2.device_type) thin -> None,
+        num_threads: Int = TBSize,
     ](mut self, v1: V1, v2: V2) raises:
         comptime if Self.backend == "gpu":
             def kernel(v1: V1.device_type, v2: V2.device_type):
@@ -504,10 +511,10 @@ struct Mojito[backend: String]():
                 var ix = Int(block_idx.z * block_dim.z + thread_idx.z)
                 if ix < Nx and iy < Ny and iz < Nz:
                     func(ix, iy, iz, v1, v2)
-            self._ctx.value().enqueue_function[kernel, kernel](
+            self._ctx.value().enqueue_function[kernel](
                 v1, v2,
-                grid_dim  = (ceildiv(Nz, TBSize), Ny, Nx),
-                block_dim = (TBSize, 1, 1)
+                grid_dim  = (ceildiv(Nz, num_threads), Ny, Nx),
+                block_dim = (num_threads, 1, 1)
             )
             self._ctx.value().synchronize()
         else:
@@ -528,8 +535,9 @@ struct Mojito[backend: String]():
         V2: DevicePassable,
         dtype: DType,
         func: def(i: Int, v1: V1.device_type, v2: V2.device_type) thin -> Scalar[dtype],
+        num_threads: Int = TBSize,
     ](mut self, v1: V1, v2: V2) raises -> Scalar[dtype]:
-        comptime num_blocks = ceildiv(N, TBSize)
+        comptime num_blocks = ceildiv(N, num_threads)
         var res: Scalar[dtype] = 0
 
         comptime if Self.backend == "gpu":
@@ -541,7 +549,7 @@ struct Mojito[backend: String]():
                 partial: UnsafePointer[Scalar[dtype], MutAnyOrigin]
             ):
                 var shared = stack_allocation[
-                    TBSize,
+                    num_threads,
                     Scalar[dtype],
                     address_space=AddressSpace.SHARED,
                 ]()
@@ -553,7 +561,7 @@ struct Mojito[backend: String]():
                     shared[thread_idx.x] = 0
                 barrier()
 
-                var offset = TBSize // 2
+                var offset = num_threads // 2
                 while offset > 0:
                     if i_local < offset:
                         shared[i_local] += shared[i_local + offset]
@@ -563,10 +571,10 @@ struct Mojito[backend: String]():
                 if i_local == 0:
                     partial[block_idx.x] = shared[0]
 
-            self._ctx.value().enqueue_function[kernel, kernel](
+            self._ctx.value().enqueue_function[kernel](
                 v1, v2, partial,
                 grid_dim=num_blocks,
-                block_dim=TBSize
+                block_dim=num_threads
             )
             self._ctx.value().synchronize()
 
