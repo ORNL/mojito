@@ -338,6 +338,20 @@ def body(
 ) -> Float32:
     return (a[i] * b[i])
 
+def test_cpu_parallel_reduce_2_args() raises:
+    comptime backend = "cpu"
+    comptime N = 10
+    comptime dtype = DType.float32
+
+    mj = Mojito[backend]()
+    x = mj.fill[dtype, N](3.0)
+    y = mj.fill[dtype, N](2.0)
+
+    var res = mj.parallel_reduce[N, dtype=dtype, func=body](x, y)
+
+    # 10 * 3.0 * 2.0 = 60.0
+    assert_equal(res, Float32(60.0))
+
 def test_gpu_parallel_reduce_2_args() raises:
     comptime backend = "gpu"
     comptime N = 10

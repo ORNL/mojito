@@ -5,7 +5,8 @@ from std.builtin.device_passable import DevicePassable
 from std.memory import stack_allocation
 from std.collections import Optional
 from std.algorithm import parallelize, reduction
-from std.math import ceildiv
+from std.math import ceildiv, min
+from std.runtime.asyncrt import parallelism_level
 
 comptime TBSize = 512
 
@@ -573,7 +574,27 @@ struct Mojito[backend: String]():
                 for i in range(num_blocks):
                     res += h_partial[i]
         # CPU path:
-        # else:
+        else:
+            var dv1 = stack_allocation[1, V1.device_type]()
+            var dv2 = stack_allocation[1, V2.device_type]()
+            v1._to_device_type(dv1.bitcast[NoneType]())
+            v2._to_device_type(dv2.bitcast[NoneType]())
 
+            var num_workers = parallelism_level()
+            var chunk = ceildiv(N, num_workers)
+            var partials = List[Scalar[dtype]](length=num_workers, fill=0)
+
+            def worker(tid: Int) capturing -> None:
+                var start = tid * chunk
+                var end = min(start + chunk, N)
+                var s: Scalar[dtype] = 0
+                for i in range(start, end):
+                    s += func(i, dv1[0], dv2[0])
+                partials[tid] = s
+
+            parallelize[worker](num_workers)
+
+            for i in range(num_workers):
+                res += partials[i]
 
         return res
