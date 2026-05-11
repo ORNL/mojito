@@ -74,8 +74,9 @@ def main();
 
 ## Known issues
 
-- Currently works with Mojo v1.0
-- Apple M1/M3 GPU support requires running `xcodebuild -downloadComponent MetalToolchain`, see [issue](https://github.com/modular/modular/issues/6466). 
+- Currently works with mojo = "==0.26.3.0.dev2026042205"
+- Apple M1/M3 GPU support fixed in Mojo nightly. 
+- To do: CI to be added with Mojo v1.0 release.
 
 ## Project status
 
