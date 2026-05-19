@@ -3,6 +3,7 @@
 [![ci-cpu](https://github.com/ORNL/mojito/actions/workflows/ci-cpu.yaml/badge.svg)](https://github.com/ORNL/mojito/actions/workflows/ci-cpu.yaml)
 [![ci-gpu-NVIDIA](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-NVIDIA.yaml/badge.svg)](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-NVIDIA.yaml)
 [![ci-gpu-AMD](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-AMD.yaml/badge.svg)](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-AMD.yaml)
+[![ci-gpu-Apple](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-Apple.yaml/badge.svg)](https://github.com/ORNL/mojito/actions/workflows/ci-gpu-Apple.yaml)
 
 
 `mojito` is a [Mojo](https://www.modular.com/open-source/mojo) library to easily implement CPU/GPU performance portable `array`, `parallel_for` and `parallel_reduce` kernels. 
@@ -74,7 +75,7 @@ def main();
 
 ## Known issues
 
-- Currently works with Mojo v1.0
+- Current version locked to `Mojo==1.0.0b2.dev2026051106`
 - Apple M1/M3 GPU support requires running `xcodebuild -downloadComponent MetalToolchain`, see [issue](https://github.com/modular/modular/issues/6466). 
 
 ## Project status
@@ -87,5 +88,5 @@ The work is funded by the Advanced Scientific Computing Research (ASCR) program 
 
 # Contributors
 
-- [Tatiana Melnichenko](https://github.com/tdehoff), University of Tennessee Knoxville
+- [Tatiana Melnichenko](https://github.com/tdehoff), University of Tennessee, Knoxville
 - [William F Godoy](https://github.com/williamfgc), Oak Ridge National Laboratory
