@@ -1,382 +1,335 @@
-from std.testing import assert_equal, TestSuite
-from mojito import *
-
-from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceContext
-from std.math import ceildiv
+from std.testing import assert_equal, assert_true, TestSuite
 from std.sys import has_accelerator
 
-# Int is no longer DevicePassable (host/device width mismatch), so kernel
-# arguments use the fixed-width Int32 instead.
-def init_kernel_gpu[
-    dtype: DType
-](
-    Nx: Int32,
-    inout_array: Pointer[Scalar[dtype], MutUntrackedOrigin]
-):
-    var i: Int = block_idx.x * block_dim.x + thread_idx.x
-    if i < Int(Nx):
-        inout_array[unsafe_offset=i] = Scalar[dtype](i)
+from mojito import *
 
 
-def init_kernel_cpu[
-    dtype: DType
-](
-    Nx: Int,
-    inout_array: Pointer[Scalar[dtype], MutUntrackedOrigin]
-):
-    for i in range(Nx):
-        inout_array[unsafe_offset=i] = Scalar[dtype](i)
+# ===------------------------------------------------------------------=== #
+# Generic test bodies, instantiated per target
+# ===------------------------------------------------------------------=== #
 
 
-def test_cpu_arrays() raises:
-    comptime backend = "cpu"
-    comptime Nx = 5
+def _test_create_and_fill[target: StaticString]() raises:
     comptime dtype = DType.float32
+    var mj = Mojito[target]()
+    var n = 100
 
-    var mj = Mojito[backend]()
+    var a = mj.full[dtype](3.5, n)
+    var m = mj.create_mirror(a)
+    mj.deep_copy(m, a)
+    mj.fence()
+    for i in range(n):
+        assert_equal(m[i], 3.5)
 
-    var mj_arr = mj.empty[dtype, Nx]()
-    var mj_zeros = mj.zeros[dtype, Nx]()
-    var mj_ones = mj.ones[dtype, Nx]()
-    var mj_fill = mj.fill[dtype, Nx](-1.0)
+    assert_equal(a.size(), n)
+    assert_equal(a.extent(0), n)
 
-    for i in range(Nx):
-        mj_arr[i] = Scalar[dtype](i)
-
-    for i in range(Nx):
-        assert_equal(mj_arr[i], Scalar[dtype](i))
-        assert_equal(mj_zeros[i], 0)
-        assert_equal(mj_ones[i], 1)
-        assert_equal(mj_fill[i], -1)
+    var b3 = mj.full[dtype](-1.0, 2, 3, 4)
+    assert_equal(b3.size(), 24)
+    assert_equal(b3.extent(2), 4)
+    var m3 = mj.create_mirror(b3)
+    mj.deep_copy(m3, b3)
+    mj.fence()
+    for i in range(24):
+        assert_equal(m3[i], -1.0)
 
 
-def test_cpu_init() raises:
-    comptime backend = "cpu"
-    comptime Nx = 5
+def _test_mirror_semantics[target: StaticString]() raises:
     comptime dtype = DType.float32
+    var mj = Mojito[target]()
+    var a = mj.full[dtype](7.0, 10)
+    var m = mj.create_mirror(a)
 
-    var mj = Mojito[backend]()
-    var mj_arr = mj.zeros[dtype, Nx]()
+    comptime if target == "cpu":
+        # Host-accessible source: the mirror aliases it.
+        m[0] = 9.0
+        assert_equal(a[0], 9.0)
+    # deep_copy is a no-op on aliases and a real copy otherwise.
+    mj.deep_copy(m, a)
+    mj.fence()
+    for i in range(1, 10):
+        assert_equal(m[i], 7.0)
 
-    init_kernel_cpu[dtype](Nx, mj_arr._data)
 
-    for i in range(Nx):
-        assert_equal(mj_arr[i], Scalar[dtype](i))
-
-
-def test_gpu_arrays() raises:
-    comptime backend = "gpu"
-    comptime Nx = 5
+def _test_parallel_for_1d[target: StaticString]() raises:
     comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-
-    var mj_zeros = mj.zeros[dtype, Nx]()
-    var mj_ones = mj.ones[dtype, Nx]()
-    var mj_fill = mj.fill[dtype, Nx](-1.0)
-
-    mj_zeros.to_host()
-    mj_ones.to_host()
-    mj_fill.to_host()
-
-    mj.sync()
-
-    for i in range(Nx):
-        assert_equal(mj_zeros[i], 0)
-        assert_equal(mj_ones[i], 1)
-        assert_equal(mj_fill[i], -1.0)
-
-
-def test_gpu_kernel() raises:
-    comptime backend = "gpu"
-    comptime Nx = 5
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-    var mj_arr = mj.empty[dtype, Nx]()
-
-    var ctx = mj.get_ctx()
-    comptime kernel = init_kernel_gpu[dtype]
-    var compiled_func = ctx.compile_function[kernel]()
-    ctx.enqueue_function(compiled_func,
-        Int32(Nx),
-        mj_arr._data,
-        grid_dim=ceildiv(Nx, 256),
-        block_dim=256
-    )
-    mj.sync()
-
-    mj_arr.to_host()
-    mj.sync()
-
-    for i in range(Nx):
-        assert_equal(mj_arr[i], Scalar[dtype](i))
-
-
-def test_3D_gpu_arrays() raises:
-    comptime backend = "gpu"
-    comptime Nx = 2
-    comptime Ny = 3
-    comptime Nz = 4
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-
-    var mj_arr = mj.empty[dtype, Nx, Ny, Nz]()
-
-    mj_arr.to_host()
-    mj.sync()
-
-    for i in range (Nx * Ny * Nz):
-        mj_arr[i] = Scalar[dtype](i)
-
-    for i in range(Nx):
-        for j in range(Ny):
-            for k in range(Nz):
-                assert_equal(mj_arr[i, j, k], Scalar[dtype](i * Ny * Nz + j * Nz + k))
-
-
-def test_cpu_copy_functions() raises:
-    comptime backend = "cpu"
-    comptime Nx = 5
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-    var mj_arr = mj.fill[dtype, Nx](3.0)
-
-    var host_copy = mj.copy_to_host(mj_arr)
-    var dev_copy = mj.copy_to_device(mj_arr)
-
-    # Both are shallow (non-owning); values match the original
-    for i in range(Nx):
-        assert_equal(host_copy[i], 3.0)
-        assert_equal(dev_copy[i], 3.0)
-
-    # Original is intact
-    for i in range(Nx):
-        assert_equal(mj_arr[i], 3.0)
-
-
-def test_gpu_copy_to_host() raises:
-    comptime backend = "gpu"
-    comptime Nx = 5
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-    var dev_arr = mj.fill[dtype, Nx](7.0)  # buffer starts on device
-
-    # Deep copy: new host buffer, dev_arr stays on device
-    var host_copy = mj.copy_to_host(dev_arr)
-    mj.sync()
-
-    for i in range(Nx):
-        assert_equal(host_copy[i], 7.0)
-
-    # host_copy owns its buffer and knows it is on host
-    assert_equal(host_copy._owned, True)
-    assert_equal(host_copy._on_host, True)
-
-    # original is still on device
-    assert_equal(dev_arr._on_host, False)
-
-
-def test_gpu_copy_to_device() raises:
-    comptime backend = "gpu"
-    comptime Nx = 5
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-
-    # Build a host-pinned source array with known values
-    var host_arr = mj.fill[dtype, Nx](0.0)
-    host_arr.to_host()
-    mj.sync()
-    for i in range(Nx):
-        host_arr[i] = Scalar[dtype](i)
-
-    # Deep copy to device
-    var dev_copy = mj.copy_to_device(host_arr)
-
-    # Move back to verify values
-    dev_copy.to_host()
-    mj.sync()
-    for i in range(Nx):
-        assert_equal(dev_copy[i], Scalar[dtype](i))
-
-    # Original host array is unchanged
-    for i in range(Nx):
-        assert_equal(host_arr[i], Scalar[dtype](i))
-
-# Function bodies to test parallel_for (1, 2, 3 args)
-def fill_body(
-    i: Int,
-    a: array_ref[DType.float32, 10],
-) -> None:
-    a[i] = Float32(i)
-
-def copy_body(
-    i: Int,
-    a: array_ref[DType.float32, 10],
-    b: array_ref[DType.float32, 10],
-) -> None:
-    a[i] = b[i]
-
-def axpy_body(
-    i: Int,
-    alpha: Float32,
-    x: array_ref[DType.float32, 10],
-    y: array_ref[DType.float32, 10],
-) -> None:
-    y[i] = alpha * x[i] + y[i]
-
-
-def test_cpu_parallel_for_1_arg() raises:
-    comptime backend = "cpu"
-    comptime N = 10
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-    var a = mj.zeros[dtype, N]()
-
-    mj.parallel_for[N, func=fill_body](a)
-
-    for i in range(N):
-        assert_equal(a[i], Scalar[dtype](i))
-
-
-def test_gpu_parallel_for_1_arg() raises:
-    comptime backend = "gpu"
-    comptime N = 10
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-    var a = mj.zeros[dtype, N]()
-    mj.parallel_for[N, func=fill_body, num_threads=128](a)
-
-    a.to_host()
-    mj.sync()
-
-    for i in range(N):
-        assert_equal(a[i], Scalar[dtype](i))
-
-
-def test_cpu_parallel_for_2_args() raises:
-    comptime backend = "cpu"
-    comptime N = 10
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-    var a = mj.zeros[dtype, N]()
-    var b = mj.fill[dtype, N](7.0)
-
-    mj.parallel_for[N, func=copy_body](a, b)
-
-    for i in range(N):
-        assert_equal(a[i], b[i])
-
-
-def test_gpu_parallel_for_2_args() raises:
-    comptime backend = "gpu"
-    comptime N = 10
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
-    var a = mj.zeros[dtype, N]()
-    var b = mj.fill[dtype, N](7.0)
-
-    mj.parallel_for[N, func=copy_body](a, b)
-
-    a.to_host()
-    b.to_host()
-    mj.sync()
-
-    for i in range(N):
-        assert_equal(a[i], b[i])
-
-
-def test_cpu_parallel_for_3_args() raises:
-    comptime backend = "cpu"
-    comptime N = 10
-    comptime dtype = DType.float32
-
-    var mj = Mojito[backend]()
+    var mj = Mojito[target]()
+    var n = 1000
+
+    var x = mj.full[dtype](3.0, n)
+    var y = mj.full[dtype](1.0, n)
+    var xv = x.view()
+    var yv = y.view()
     var alpha = Float32(2.0)
-    var x = mj.fill[dtype, N](3.0)
-    var y = mj.fill[dtype, N](1.0)
 
-    mj.parallel_for[N, func=axpy_body](alpha, x, y)
+    def axpy(i: Int) {var alpha, var xv, var yv}:
+        yv[i] = alpha * xv[i] + yv[i]
 
-    # y[i] = 2.0 * 3.0 + 1.0 = 7.0
-    for i in range(N):
-        assert_equal(y[i], 7.0)
+    mj.parallel_for(n, axpy)
+    mj.fence()
+
+    var m = mj.create_mirror(y)
+    mj.deep_copy(m, y)
+    mj.fence()
+    for i in range(n):
+        assert_equal(m[i], 7.0)
 
 
-def test_gpu_parallel_for_3_args() raises:
-    comptime backend = "gpu"
-    comptime N = 10
+def _test_parallel_for_range_offset[target: StaticString]() raises:
     comptime dtype = DType.float32
+    var mj = Mojito[target]()
+    var n = 100
 
-    var mj = Mojito[backend]()
-    var alpha = Float32(2.0)
-    var x = mj.fill[dtype, N](3.0)
-    var y = mj.fill[dtype, N](1.0)
+    var a = mj.full[dtype](0.0, n)
+    var av = a.view()
 
-    mj.parallel_for[N, func=axpy_body](alpha, x, y)
+    def body(i: Int) {var av}:
+        av[i] = Float32(i)
 
-    y.to_host()
-    mj.sync()
+    mj.parallel_for(RangePolicy(10, 20), body)
+    mj.fence()
 
-    # y[i] = 2.0 * 3.0 + 1.0 = 7.0
-    for i in range(N):
-        assert_equal(y[i], 7.0)
+    var m = mj.create_mirror(a)
+    mj.deep_copy(m, a)
+    mj.fence()
+    for i in range(n):
+        if i >= 10 and i < 20:
+            assert_equal(m[i], Float32(i))
+        else:
+            assert_equal(m[i], 0.0)
 
 
-def body(
-    i: Int,
-    a: array_ref[DType.float32, 10],
-    b: array_ref[DType.float32, 10]
-) -> Float32:
-    return (a[i] * b[i])
-
-def test_cpu_parallel_reduce_2_args() raises:
-    comptime backend = "cpu"
-    comptime N = 10
+def _test_parallel_for_2d[target: StaticString]() raises:
     comptime dtype = DType.float32
+    var mj = Mojito[target]()
+    var nx = 37
+    var ny = 53
 
-    var mj = Mojito[backend]()
-    var x = mj.fill[dtype, N](3.0)
-    var y = mj.fill[dtype, N](2.0)
+    var a = mj.full[dtype](0.0, nx, ny)
+    var av = a.view()
 
-    var res = mj.parallel_reduce[N, dtype=dtype, func=body](x, y)
+    def body(i: Int, j: Int) {var av}:
+        av[i, j] = Float32(i * 1000 + j)
 
-    # 10 * 3.0 * 2.0 = 60.0
-    assert_equal(res, Float32(60.0))
+    mj.parallel_for(MDRangePolicy[2]({nx, ny}), body)
+    mj.fence()
 
-def test_gpu_parallel_reduce_2_args() raises:
-    comptime backend = "gpu"
-    comptime N = 10
+    var m = mj.create_mirror(a)
+    mj.deep_copy(m, a)
+    mj.fence()
+    for i in range(nx):
+        for j in range(ny):
+            assert_equal(m[i, j], Float32(i * 1000 + j))
+
+
+def _test_parallel_for_3d[target: StaticString]() raises:
     comptime dtype = DType.float32
+    var mj = Mojito[target]()
+    var nx = 8
+    var ny = 9
+    var nz = 10
 
-    var mj = Mojito[backend]()
-    var x = mj.fill[dtype, N](3.0)
-    var y = mj.fill[dtype, N](2.0)
+    var a = mj.full[dtype](0.0, nx, ny, nz)
+    var av = a.view()
 
-    var res = mj.parallel_reduce[N, dtype=dtype, func=body](x, y)
+    def body(i: Int, j: Int, k: Int) {var av}:
+        av[i, j, k] = Float32((i * 100 + j) * 100 + k)
 
-    # 10 * 3.0 * 2.0 = 60.0
-    assert_equal(res, Float32(60.0))
+    mj.parallel_for(MDRangePolicy[3]({nx, ny, nz}), body)
+    mj.fence()
+
+    var m = mj.create_mirror(a)
+    mj.deep_copy(m, a)
+    mj.fence()
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz):
+                assert_equal(m[i, j, k], Float32((i * 100 + j) * 100 + k))
+
+
+def _test_reduce_sum[target: StaticString]() raises:
+    # float32: Apple GPUs have no fp64 support in Metal.
+    comptime dtype = DType.float32
+    var mj = Mojito[target]()
+    var n = 10000
+
+    var x = mj.full[dtype](3.0, n)
+    var y = mj.full[dtype](2.0, n)
+    var xv = x.view()
+    var yv = y.view()
+
+    def dot(i: Int) {var xv, var yv} -> Float32:
+        return xv[i] * yv[i]
+
+    var res = mj.parallel_reduce[Sum, dtype](n, dot)
+    assert_equal(res, 6.0 * Float32(n))
+
+
+def _test_reduce_minmax[target: StaticString]() raises:
+    comptime dtype = DType.float32
+    var mj = Mojito[target]()
+    var n = 5000
+
+    var a = mj.full[dtype](0.0, n)
+    var av = a.view()
+
+    def init(i: Int) {var av}:
+        av[i] = Float32((i * 7919) % 10007)
+
+    mj.parallel_for(n, init)
+    mj.fence()
+
+    def rd(i: Int) {var av} -> Float32:
+        return av[i]
+
+    var lo = mj.parallel_reduce[Min, dtype](n, rd)
+    var hi = mj.parallel_reduce[Max, dtype](n, rd)
+
+    # Reference on the host.
+    var m = mj.create_mirror(a)
+    mj.deep_copy(m, a)
+    mj.fence()
+    var ref_lo = Float32(1e30)
+    var ref_hi = Float32(-1e30)
+    for i in range(n):
+        var v = m[i]
+        if v < ref_lo:
+            ref_lo = v
+        if v > ref_hi:
+            ref_hi = v
+    assert_equal(lo, ref_lo)
+    assert_equal(hi, ref_hi)
+
+
+def _test_reduce_non_multiple[target: StaticString]() raises:
+    comptime dtype = DType.float32
+    var mj = Mojito[target]()
+
+    # Sizes that are not multiples of the block size.
+    for n in [1, 7, 255, 257, 1000, 4097]:
+        var a = mj.full[dtype](1.0, n)
+        var av = a.view()
+
+        def one(i: Int) {var av} -> Float32:
+            return av[i]
+
+        var c = mj.parallel_reduce[Sum, dtype](n, one)
+        assert_equal(c, Float32(n))
+
+
+# ===------------------------------------------------------------------=== #
+# CPU-only extras
+# ===------------------------------------------------------------------=== #
+
+
+def test_cpu_host_indexing() raises:
+    comptime dtype = DType.float32
+    var mj = Mojito["cpu"]()
+
+    var a = mj.empty[dtype](4, 5)
+    for i in range(4):
+        for j in range(5):
+            a[i, j] = Float32(i * 5 + j)
+    for i in range(4):
+        for j in range(5):
+            assert_equal(a[i, j], Float32(i * 5 + j))
+
+    var b = mj.empty[dtype](2, 3, 4)
+    for i in range(24):
+        b[i] = Float32(i)
+    assert_equal(b[1, 2, 3], Float32(23))
+
+
+# ===------------------------------------------------------------------=== #
+# Per-target test entry points
+# ===------------------------------------------------------------------=== #
+
+
+def test_cpu_create_and_fill() raises:
+    _test_create_and_fill["cpu"]()
+
+
+def test_cpu_mirror_semantics() raises:
+    _test_mirror_semantics["cpu"]()
+
+
+def test_cpu_parallel_for_1d() raises:
+    _test_parallel_for_1d["cpu"]()
+
+
+def test_cpu_parallel_for_range_offset() raises:
+    _test_parallel_for_range_offset["cpu"]()
+
+
+def test_cpu_parallel_for_2d() raises:
+    _test_parallel_for_2d["cpu"]()
+
+
+def test_cpu_parallel_for_3d() raises:
+    _test_parallel_for_3d["cpu"]()
+
+
+def test_cpu_reduce_sum() raises:
+    _test_reduce_sum["cpu"]()
+
+
+def test_cpu_reduce_minmax() raises:
+    _test_reduce_minmax["cpu"]()
+
+
+def test_cpu_reduce_non_multiple() raises:
+    _test_reduce_non_multiple["cpu"]()
+
+
+def test_gpu_create_and_fill() raises:
+    _test_create_and_fill["gpu"]()
+
+
+def test_gpu_mirror_semantics() raises:
+    _test_mirror_semantics["gpu"]()
+
+
+def test_gpu_parallel_for_1d() raises:
+    _test_parallel_for_1d["gpu"]()
+
+
+def test_gpu_parallel_for_range_offset() raises:
+    _test_parallel_for_range_offset["gpu"]()
+
+
+def test_gpu_parallel_for_2d() raises:
+    _test_parallel_for_2d["gpu"]()
+
+
+def test_gpu_parallel_for_3d() raises:
+    _test_parallel_for_3d["gpu"]()
+
+
+def test_gpu_reduce_sum() raises:
+    _test_reduce_sum["gpu"]()
+
+
+def test_gpu_reduce_minmax() raises:
+    _test_reduce_minmax["gpu"]()
+
+
+def test_gpu_reduce_non_multiple() raises:
+    _test_reduce_non_multiple["gpu"]()
 
 
 def main():
     comptime if not has_accelerator():
         var suite = TestSuite(cli_args=List[StaticString]())
-        suite.test[test_cpu_arrays]()
-        suite.test[test_cpu_init]()
-        suite.test[test_cpu_copy_functions]()
-        suite.test[test_cpu_parallel_for_1_arg]()
-        suite.test[test_cpu_parallel_for_2_args]()
-        suite.test[test_cpu_parallel_for_3_args]()
+        suite.test[test_cpu_create_and_fill]()
+        suite.test[test_cpu_mirror_semantics]()
+        suite.test[test_cpu_host_indexing]()
+        suite.test[test_cpu_parallel_for_1d]()
+        suite.test[test_cpu_parallel_for_range_offset]()
+        suite.test[test_cpu_parallel_for_2d]()
+        suite.test[test_cpu_parallel_for_3d]()
+        suite.test[test_cpu_reduce_sum]()
+        suite.test[test_cpu_reduce_minmax]()
+        suite.test[test_cpu_reduce_non_multiple]()
         try:
             suite^.run()
         except e:

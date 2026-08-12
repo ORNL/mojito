@@ -4,13 +4,13 @@ from std.math import sin, cos, sqrt
 from std.time import monotonic
 from std.utils.numerics import max_finite
 
-from mojito import Mojito, array, array_ref
+from mojito import *
 
 comptime NUM_ITER = 100
 comptime NUM_POSES = 65536
-comptime WG_SIZE = 64      # Work group size
+comptime WG_SIZE = 64  # Work group size
 # DEFAULT_PPWI 1, 2, 4, 8, 16, 32, 64, 128
-comptime PPWI = 4          # Poses per work item
+comptime PPWI = 4  # Poses per work item
 comptime DIFF_TOLERANCE_PCT = 0.025
 
 comptime Zero = 0.0
@@ -43,6 +43,7 @@ comptime NFF = 34
 # comptime NATLIG = 2672
 # comptime NFF = 44
 
+
 struct Vec3f32(ImplicitlyCopyable, Movable):
     var x: Float32
     var y: Float32
@@ -52,6 +53,7 @@ struct Vec3f32(ImplicitlyCopyable, Movable):
         self.x = x
         self.y = y
         self.z = z
+
 
 struct Vec4f32(ImplicitlyCopyable, Movable):
     var x: Float32
@@ -64,6 +66,7 @@ struct Vec4f32(ImplicitlyCopyable, Movable):
         self.y = y
         self.z = z
         self.w = w
+
 
 struct Atom(ImplicitlyCopyable, Movable):
     var x: Float32
@@ -85,7 +88,7 @@ struct Atom(ImplicitlyCopyable, Movable):
 
         var ptr = bytes.unsafe_ptr().unsafe_bitcast[UInt8]()
         var atoms = List[Atom]()
-        var atom_size = 16      # Float32 x,y,z + Int32 type = 16 bytes
+        var atom_size = 16  # Float32 x,y,z + Int32 type = 16 bytes
 
         var byte_count = len(bytes)
         var total = byte_count // atom_size
@@ -99,13 +102,16 @@ struct Atom(ImplicitlyCopyable, Movable):
             atoms.append(Atom(x, y, z, t))
         return atoms^
 
+
 struct FFParams(ImplicitlyCopyable, Movable):
     var hbtype: Int32
     var radius: Float32
     var hphb: Float32
     var elsc: Float32
 
-    def __init__(out self, hbtype: Int32, radius: Float32, hphb: Float32, elsc: Float32):
+    def __init__(
+        out self, hbtype: Int32, radius: Float32, hphb: Float32, elsc: Float32
+    ):
         self.hbtype = hbtype
         self.radius = radius
         self.hphb = hphb
@@ -119,7 +125,7 @@ struct FFParams(ImplicitlyCopyable, Movable):
 
         var ptr = bytes.unsafe_ptr().unsafe_bitcast[UInt8]()
         var ffparams = List[FFParams]()
-        var atom_size = 16      # 3 Float32s + 1 Int = 16 bytes
+        var atom_size = 16  # 3 Float32s + 1 Int = 16 bytes
 
         var byte_count = len(bytes)
         var total = byte_count // atom_size
@@ -127,11 +133,16 @@ struct FFParams(ImplicitlyCopyable, Movable):
         for i in range(total):
             var offset = i * atom_size
             var hbtype = ptr.unsafe_offset(offset + 0).unsafe_bitcast[Int32]()[]
-            var radius = ptr.unsafe_offset(offset + 4).unsafe_bitcast[Float32]()[]
-            var hphb   = ptr.unsafe_offset(offset + 8).unsafe_bitcast[Float32]()[]
-            var elsc   = ptr.unsafe_offset(offset + 12).unsafe_bitcast[Float32]()[]
+            var radius = ptr.unsafe_offset(offset + 4).unsafe_bitcast[
+                Float32
+            ]()[]
+            var hphb = ptr.unsafe_offset(offset + 8).unsafe_bitcast[Float32]()[]
+            var elsc = ptr.unsafe_offset(offset + 12).unsafe_bitcast[
+                Float32
+            ]()[]
             ffparams.append(FFParams(hbtype, radius, hphb, elsc))
         return ffparams^
+
 
 def read_poses(path: String) raises -> List[List[Float32]]:
     var file = open(path, "r")
@@ -145,7 +156,12 @@ def read_poses(path: String) raises -> List[List[Float32]]:
 
     var num_poses = total_floats // 6
     if not num_poses == NUM_POSES:
-        raise Error("Number of poses", num_poses, "doesn't match the expected:", NUM_POSES)
+        raise Error(
+            "Number of poses",
+            num_poses,
+            "doesn't match the expected:",
+            NUM_POSES,
+        )
 
     var poses = List[List[Float32]]()
     for i in range(6):
@@ -155,6 +171,7 @@ def read_poses(path: String) raises -> List[List[Float32]]:
         poses.append(component^)
     return poses^
 
+
 struct Params:
     var num_poses: Int
     var iterations: Int
@@ -162,17 +179,20 @@ struct Params:
     var ppwi: Int
     var deck: String
 
-    def __init__(out self,
-                num_poses: Int = NUM_POSES,
-                iterations: Int = NUM_ITER,
-                wgsize: Int = WG_SIZE,
-                ppwi: Int = PPWI,
-                deck: String = "minibude_data/bm1"):
+    def __init__(
+        out self,
+        num_poses: Int = NUM_POSES,
+        iterations: Int = NUM_ITER,
+        wgsize: Int = WG_SIZE,
+        ppwi: Int = PPWI,
+        deck: String = "minibude_data/bm1",
+    ):
         self.num_poses = num_poses
         self.iterations = iterations
         self.wgsize = wgsize
         self.ppwi = ppwi
         self.deck = deck
+
 
 @fieldwise_init
 struct Deck:
@@ -181,13 +201,14 @@ struct Deck:
     var forcefield: List[FFParams]
     var poses: List[List[Float32]]
 
+
 def fasten_body(
     idx: Int,
-    protein: array_ref[dtype, 4, NATPRO],
-    ligand: array_ref[dtype, 4, NATLIG],
-    forcefield: array_ref[dtype, 4, NFF],
-    transforms: array_ref[dtype, 6, NUM_POSES],
-    etotals: array_ref[dtype, NUM_POSES],
+    protein: array_view[dtype, 2, _],
+    ligand: array_view[dtype, 2, _],
+    forcefield: array_view[dtype, 2, _],
+    transforms: array_view[dtype, 2, _],
+    etotals: array_view[dtype, 1, _],
 ) -> None:
     # Compute transformation matrix to private memory
     var etot = InlineArray[Float32, PPWI](fill=0)
@@ -221,8 +242,15 @@ def fasten_body(
     # Loop over ligand atoms
     var il = 0
     while True:
-        var l_atom = Atom(ligand[0, il], ligand[1, il], ligand[2, il], Int32(ligand[3, il]))
-        var l_params = FFParams(Int32(forcefield[0, Int(l_atom.type)]), forcefield[1, Int(l_atom.type)], forcefield[2, Int(l_atom.type)], forcefield[3, Int(l_atom.type)])
+        var l_atom = Atom(
+            ligand[0, il], ligand[1, il], ligand[2, il], Int32(ligand[3, il])
+        )
+        var l_params = FFParams(
+            Int32(forcefield[0, Int(l_atom.type)]),
+            forcefield[1, Int(l_atom.type)],
+            forcefield[2, Int(l_atom.type)],
+            forcefield[3, Int(l_atom.type)],
+        )
         var lhphb_ltz = l_params.hphb < Zero
         var lhphb_gtz = l_params.hphb > Zero
 
@@ -232,15 +260,31 @@ def fasten_body(
             var t0 = transform[i * 3]
             var t1 = transform[i * 3 + 1]
             var t2 = transform[i * 3 + 2]
-            lpos[i].x = t0.w + linitpos.x * t0.x + linitpos.y * t0.y + linitpos.z * t0.z
-            lpos[i].y = t1.w + linitpos.x * t1.x + linitpos.y * t1.y + linitpos.z * t1.z
-            lpos[i].z = t2.w + linitpos.x * t2.x + linitpos.y * t2.y + linitpos.z * t2.z
+            lpos[i].x = (
+                t0.w + linitpos.x * t0.x + linitpos.y * t0.y + linitpos.z * t0.z
+            )
+            lpos[i].y = (
+                t1.w + linitpos.x * t1.x + linitpos.y * t1.y + linitpos.z * t1.z
+            )
+            lpos[i].z = (
+                t2.w + linitpos.x * t2.x + linitpos.y * t2.y + linitpos.z * t2.z
+            )
 
         # Loop over protein atoms
         var ip = 0
         while True:
-            var p_atom = Atom(protein[0, ip], protein[1, ip], protein[2, ip], Int32(protein[3, ip]))
-            var p_params = FFParams(Int32(forcefield[0, Int(p_atom.type)]), forcefield[1, Int(p_atom.type)], forcefield[2, Int(p_atom.type)], forcefield[3, Int(p_atom.type)])
+            var p_atom = Atom(
+                protein[0, ip],
+                protein[1, ip],
+                protein[2, ip],
+                Int32(protein[3, ip]),
+            )
+            var p_params = FFParams(
+                Int32(forcefield[0, Int(p_atom.type)]),
+                forcefield[1, Int(p_atom.type)],
+                forcefield[2, Int(p_atom.type)],
+                forcefield[3, Int(p_atom.type)],
+            )
 
             var radij = p_params.radius + l_params.radius
             var r_radij = 1.0 / radij
@@ -257,10 +301,12 @@ def fasten_body(
             else:
                 elcdst1 = Half
 
-            var type_E    = p_params.hbtype == HBTYPE_E or l_params.hbtype == HBTYPE_E
+            var type_E = (
+                p_params.hbtype == HBTYPE_E or l_params.hbtype == HBTYPE_E
+            )
             var phphb_ltz = p_params.hphb < Zero
             var phphb_gtz = p_params.hphb > Zero
-            var phphb_nz  = p_params.hphb != Zero
+            var phphb_nz = p_params.hphb != Zero
 
             var p_hphb = p_params.hphb
             if phphb_ltz and lhphb_gtz:
@@ -287,16 +333,16 @@ def fasten_body(
                     distdslv = -FloatMax
 
             var r_distdslv = 1.0 / distdslv
-            var chrg_init  = l_params.elsc * p_params.elsc
-            var dslv_init  = p_hphb + l_hphb
+            var chrg_init = l_params.elsc * p_params.elsc
+            var dslv_init = p_hphb + l_hphb
 
             for i in range(PPWI):
-                var x      = lpos[i].x - p_atom.x
-                var y      = lpos[i].y - p_atom.y
-                var z      = lpos[i].z - p_atom.z
+                var x = lpos[i].x - p_atom.x
+                var y = lpos[i].y - p_atom.y
+                var z = lpos[i].z - p_atom.z
                 var distij = sqrt(x * x + y * y + z * z)
                 var distbb = distij - radij
-                var zone1  = distbb < Zero
+                var zone1 = distbb < Zero
 
                 # Calculate steric energy
                 var tmp = One - distij * r_radij
@@ -317,7 +363,7 @@ def fasten_body(
                     f2 = One
                 else:
                     f2 = Zero
-                var chrg_e     = chrg_init * f1 * f2
+                var chrg_e = chrg_init * f1 * f2
                 var neg_chrg_e = -abs(chrg_e)
                 if type_E:
                     chrg_e = neg_chrg_e
@@ -326,7 +372,7 @@ def fasten_body(
                 etot[i] += chrg_e * Cnstnt
 
                 # Calculate the two cases for Nonpolar-Polar repulsive interactions
-                var coeff  = One - distbb * r_distdslv
+                var coeff = One - distbb * r_distdslv
                 var dslv_e = dslv_init
                 if distbb < distdslv and phphb_nz:
                     dslv_e *= One
@@ -349,33 +395,38 @@ def fasten_body(
     for i in range(PPWI):
         etotals[idx * PPWI + i] = etot[i] * Half
 
-def fill_protein[b: String](mut a: array[b, dtype, 4, NATPRO], deck: Deck) raises:
+
+def fill_protein(mut a: array["cpu", dtype, 2], deck: Deck) raises:
     for i in range(NATPRO):
         a[0, i] = deck.protein[i].x
         a[1, i] = deck.protein[i].y
         a[2, i] = deck.protein[i].z
         a[3, i] = Float32(deck.protein[i].type)
 
-def fill_ligand[b: String](mut a: array[b, dtype, 4, NATLIG], deck: Deck) raises:
+
+def fill_ligand(mut a: array["cpu", dtype, 2], deck: Deck) raises:
     for i in range(NATLIG):
         a[0, i] = deck.ligand[i].x
         a[1, i] = deck.ligand[i].y
         a[2, i] = deck.ligand[i].z
         a[3, i] = Float32(deck.ligand[i].type)
 
-def fill_forcefield[b: String](mut a: array[b, dtype, 4, NFF], deck: Deck) raises:
+
+def fill_forcefield(mut a: array["cpu", dtype, 2], deck: Deck) raises:
     for i in range(NFF):
         a[0, i] = Float32(deck.forcefield[i].hbtype)
         a[1, i] = deck.forcefield[i].radius
         a[2, i] = deck.forcefield[i].hphb
         a[3, i] = deck.forcefield[i].elsc
 
-def fill_transforms[b: String](mut a: array[b, dtype, 6, NUM_POSES], deck: Deck) raises:
+
+def fill_transforms(mut a: array["cpu", dtype, 2], deck: Deck) raises:
     for comp in range(6):
         for j in range(NUM_POSES):
             a[comp, j] = deck.poses[comp][j]
 
-def run[backend: String]() raises:
+
+def run[target: StaticString]() raises:
     var args = argv()
     var csv_output = False
 
@@ -387,16 +438,16 @@ def run[backend: String]() raises:
         i += 1
 
     var params = Params()
-    var protein    = Atom.read_atoms(params.deck + "/protein.in")
-    var ligand     = Atom.read_atoms(params.deck + "/ligand.in")
+    var protein = Atom.read_atoms(params.deck + "/protein.in")
+    var ligand = Atom.read_atoms(params.deck + "/ligand.in")
     var forcefield = FFParams.read_ffparams(params.deck + "/forcefield.in")
-    var poses      = read_poses(params.deck + "/poses.in")
-    var deck       = Deck(protein^, ligand^, forcefield^, poses^)
+    var poses = read_poses(params.deck + "/poses.in")
+    var deck = Deck(protein^, ligand^, forcefield^, poses^)
 
-    var mj = Mojito[backend]()
+    var mj = Mojito[target]()
 
     if not csv_output:
-        print("Backend   :", backend)
+        print("Backend   :", target)
         print("Poses     : ", len(deck.poses[0]))
         print("Iterations: ", params.iterations)
         print("Ligands   : ", len(deck.ligand))
@@ -407,48 +458,61 @@ def run[backend: String]() raises:
         print("PPWI      : ", params.ppwi)
         print("")
 
-    var etotals_arr    = mj.zeros[dtype, NUM_POSES]()
-    var protein_arr    = mj.empty[dtype, 4, NATPRO]()
-    var ligand_arr     = mj.empty[dtype, 4, NATLIG]()
-    var forcefield_arr = mj.empty[dtype, 4, NFF]()
-    var transforms_arr = mj.empty[dtype, 6, NUM_POSES]()
+    var etotals_arr = mj.full[dtype](0.0, NUM_POSES)
+    var protein_arr = mj.empty[dtype](4, NATPRO)
+    var ligand_arr = mj.empty[dtype](4, NATLIG)
+    var forcefield_arr = mj.empty[dtype](4, NFF)
+    var transforms_arr = mj.empty[dtype](6, NUM_POSES)
 
-    protein_arr.to_host()
-    ligand_arr.to_host()
-    forcefield_arr.to_host()
-    transforms_arr.to_host()
-    mj.sync()
+    # Stage inputs on host mirrors, then copy to the device arrays.
+    var protein_m = mj.create_mirror(protein_arr)
+    var ligand_m = mj.create_mirror(ligand_arr)
+    var forcefield_m = mj.create_mirror(forcefield_arr)
+    var transforms_m = mj.create_mirror(transforms_arr)
 
-    fill_protein[backend](protein_arr, deck)
-    fill_ligand[backend](ligand_arr, deck)
-    fill_forcefield[backend](forcefield_arr, deck)
-    fill_transforms[backend](transforms_arr, deck)
+    fill_protein(protein_m, deck)
+    fill_ligand(ligand_m, deck)
+    fill_forcefield(forcefield_m, deck)
+    fill_transforms(transforms_m, deck)
 
-    protein_arr.to_device()
-    ligand_arr.to_device()
-    forcefield_arr.to_device()
-    transforms_arr.to_device()
+    mj.deep_copy(protein_arr, protein_m)
+    mj.deep_copy(ligand_arr, ligand_m)
+    mj.deep_copy(forcefield_arr, forcefield_m)
+    mj.deep_copy(transforms_arr, transforms_m)
+    mj.fence()
+
+    var pv = protein_arr.view()
+    var lv = ligand_arr.view()
+    var ffv = forcefield_arr.view()
+    var tv = transforms_arr.view()
+    var ev = etotals_arr.view()
+
+    def body(idx: Int) {var pv, var lv, var ffv, var tv, var ev}:
+        fasten_body(idx, pv, lv, ffv, tv, ev)
+
+    var policy = RangePolicy(NUM_WITEM, block_size=WG_SIZE)
 
     # Warmup
-    mj.parallel_for[NUM_WITEM, func=fasten_body](
-        protein_arr, ligand_arr, forcefield_arr, transforms_arr, etotals_arr)
+    mj.parallel_for(policy, body)
+    mj.fence()
 
-    # Timing 
+    # Timing
     var kernel_times = List[Float64]()
     var total_elapsed: Float64 = 0.0
 
     for _ in range(NUM_ITER):
         var start = monotonic()
-        mj.parallel_for[NUM_WITEM, func=fasten_body](
-            protein_arr, ligand_arr, forcefield_arr, transforms_arr, etotals_arr)
+        mj.parallel_for(policy, body)
+        mj.fence()
         var end = monotonic()
         var elapsed = Float64(end - start)
         kernel_times.append(elapsed)
         total_elapsed += elapsed
 
     # Validate results
-    etotals_arr.to_host()
-    mj.sync()
+    var etotals_m = mj.create_mirror(etotals_arr)
+    mj.deep_copy(etotals_m, etotals_arr)
+    mj.fence()
 
     # Load reference energies
     var ref_energies = List[Float32]()
@@ -468,7 +532,7 @@ def run[backend: String]() raises:
     var num_failed: Int = 0
     for i in range(params.num_poses):
         var ref_val = Float64(ref_energies[i])
-        var com_val = Float64(etotals_arr[i])
+        var com_val = Float64(etotals_m[i])
         # don't verify anything less than one
         if abs(ref_val) < 1.0 and abs(com_val) < 1.0:
             continue
@@ -483,20 +547,34 @@ def run[backend: String]() raises:
         if valid:
             print("Validation: PASS (max_diff_%:", max_diff_pct, ")")
         else:
-            print("Validation: FAIL (max_diff_%:", max_diff_pct,
-                  "failed:", num_failed, "/", params.num_poses, ")")
+            print(
+                "Validation: FAIL (max_diff_%:",
+                max_diff_pct,
+                "failed:",
+                num_failed,
+                "/",
+                params.num_poses,
+                ")",
+            )
 
     if csv_output:
         # print("backend,GPU,ppwi,wgsize,sum_ms,avg_ms,min_ms,max_ms,stddev_ms,gflops/s")
 
         # Average time per iteration
-        var ns      = total_elapsed / Float64(NUM_ITER)
+        var ns = total_elapsed / Float64(NUM_ITER)
         var runtime = ns * 1e-9
 
         # Compute FLOP/s
-        var ops_per_wg = UInt32(PPWI * 27 + len(deck.ligand) * (2 + PPWI * 18 + len(deck.protein) * (10 + PPWI * 30)) + PPWI)
-        var total_ops = Float64(ops_per_wg) * (Float64(NUM_POSES) / Float64(PPWI))
-        var flops  = total_ops / runtime
+        var ops_per_wg = UInt32(
+            PPWI * 27
+            + len(deck.ligand)
+            * (2 + PPWI * 18 + len(deck.protein) * (10 + PPWI * 30))
+            + PPWI
+        )
+        var total_ops = Float64(ops_per_wg) * (
+            Float64(NUM_POSES) / Float64(PPWI)
+        )
+        var flops = total_ops / runtime
         var gflops = flops / 1e9
 
         # Compute timing stats in ms
@@ -518,10 +596,31 @@ def run[backend: String]() raises:
         variance /= Float64(NUM_ITER)
         var stddev_ms = sqrt(variance)
 
-        print("Mojo,", backend, ",", PPWI, ",", WG_SIZE, ",",
-              sum_ms, ",", avg_ms, ",", min_ms, ",", max_ms, ",",
-              stddev_ms, ",", gflops)
+        print(
+            "Mojo,",
+            target,
+            ",",
+            PPWI,
+            ",",
+            WG_SIZE,
+            ",",
+            sum_ms,
+            ",",
+            avg_ms,
+            ",",
+            min_ms,
+            ",",
+            max_ms,
+            ",",
+            stddev_ms,
+            ",",
+            gflops,
+        )
+
 
 def main() raises:
-    run["gpu"]()
-    run["cpu"]()
+    comptime if has_accelerator():
+        run["gpu"]()
+        run["cpu"]()
+    else:
+        run["cpu"]()

@@ -41,41 +41,45 @@ Mojo is a new programming language suporting performance portable low-level GPU 
 Code API example:
 
 ```mojo
-
 from mojito import *
 
-comptime N = 100
-
-def axpy_kernel(
-    i: Int,
-    alpha: Float32,
-    x: array_ref[DType.float32, N],
-    y: array_ref[DType.float32, N],
-) -> None:
-    y[i] = alpha * x[i] + y[i]
-
-
 def main() raises:
+    var mj = Mojito()   # "gpu" if an accelerator is present, else "cpu"
+    var n = 100         # array extents are runtime values
 
-    comptime backend = "gpu" # or "cpu"
-    mj = Mojito[backend]()
-    alpha = Float32(2.0)
-    x = mj.fill[dtype, N](3.0)
-    y = mj.ones[dtype, N]()
+    var x = mj.full[DType.float32](3.0, n)
+    var y = mj.full[DType.float32](1.0, n)
+    var xv = x.view()
+    var yv = y.view()
+    var alpha = Float32(2.0)
 
-    mj.parallel_for[N, func=axpy_kernel](alpha, x, y)
+    # Kernel bodies are closures that capture views BY VALUE (`var`).
+    def axpy(i: Int) {var alpha, var xv, var yv}:
+        yv[i] = alpha * xv[i] + yv[i]
 
-    y.to_host() # move data back to host if running on GPU
-    mj.sync()
+    mj.parallel_for(n, axpy)   # asynchronous on GPU; fence() awaits
+    mj.fence()
 
-    # y[i] = 2.0 * 3.0 + 1.0 = 7.0
-    for i in range(N):
-        print(y[i]) # should print 7.0
+    def dot(i: Int) {var xv, var yv} -> Float32:
+        return xv[i] * yv[i]
+
+    # Reducers are monoids: Sum, Prod, Min, Max (or your own ReduceOp).
+    var d = mj.parallel_reduce[Sum, DType.float32](n, dot)
+
+    # Mirrors may alias when data is already host-accessible;
+    # deep_copy always copies (no-op on the same allocation).
+    var m = mj.create_mirror(y)
+    mj.deep_copy(m, y)
+    mj.fence()
+    for i in range(n):
+        print(m[i])  # should print 7.0
 ```
 
 ## Known issues
 
 - Current version pinned to `Mojo==1.0.0` and `MAX==26.5.0` (the `max` conda package provides the `max` Mojo package, where `DeviceContext` and other GPU host APIs live as of Mojo 1.0)
+- GPU launches are asynchronous; CPU launches currently block on return.
+- Apple GPUs have no fp64 support in Metal; use `DType.float32` there.
 - Apple M1/M3 GPU support requires running `xcodebuild -downloadComponent MetalToolchain`, see [issue](https://github.com/modular/modular/issues/6466). 
 
 ## Project status
