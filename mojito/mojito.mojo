@@ -1,10 +1,12 @@
-from std.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx, barrier
-from std.builtin.device_passable import DevicePassable
+from max.gpu.host import DeviceContext
+from max.gpu.host.device_context import DefaultDeviceTypeEncoder
+from max.gpu.sync import barrier
+from std.gpu import block_dim, block_idx, thread_idx
+from std.builtin.device_passable import DevicePassable, DeviceTypeEncoder
 
-from std.memory import stack_allocation
+from std.memory import stack_allocation, MutOpaquePointer
 from std.collections import Optional
-from std.algorithm import parallelize, reduction
+from max.algorithm import parallelize
 from std.math import ceildiv, min
 from std.runtime.asyncrt import parallelism_level
 
@@ -18,46 +20,38 @@ struct array_ref[
     Nz: Int = 1,
 ](DevicePassable, ImplicitlyCopyable):
     comptime _N = Self.Nx * Self.Ny * Self.Nz
-    var _data: UnsafePointer[Scalar[Self.dtype], MutAnyOrigin]
+    var _data: Pointer[Scalar[Self.dtype], MutUntrackedOrigin]
     comptime device_type = Self
 
     def __init__(
         out self,
-        data: UnsafePointer[Scalar[Self.dtype], MutAnyOrigin],
+        data: Pointer[Scalar[Self.dtype], MutUntrackedOrigin],
     ):
         self._data = data
 
-    # Followed syntax from https://github.com/modular/modular/issues/6145
-    def _to_device_type[
-        mut_origin: Origin[mut=True]
-    ](
-        self,
-        target: UnsafePointer[NoneType, mut_origin]
+    def _to_device_type(
+        self, mut encoder: Some[DeviceTypeEncoder], target: MutOpaquePointer[_]
     ):
-        target.bitcast[Self]().init_pointee_copy(self)
+        encoder.encode(self, target)
 
     @staticmethod
     def get_type_name() -> String:
         return "MojitoArrayView"
 
-    @staticmethod
-    def get_device_type_name() -> String:
-        return "MojitoArrayView"
-
     # Getters and setters for GPU kernel array manipulation
     def __getitem__(self, x: Int) -> Scalar[Self.dtype]:
-        return self._data[x]
+        return self._data[unsafe_offset=x]
     def __getitem__(self, x: Int, y: Int) -> Scalar[Self.dtype]:
-        return self._data[x * Self.Ny + y]
+        return self._data[unsafe_offset=x * Self.Ny + y]
     def __getitem__(self, x: Int, y: Int, z: Int) -> Scalar[Self.dtype]:
-        return self._data[x * Self.Ny * Self.Nz + y * Self.Nz + z]
+        return self._data[unsafe_offset=x * Self.Ny * Self.Nz + y * Self.Nz + z]
 
     def __setitem__(self, x: Int, value: Scalar[Self.dtype]):
-        self._data[x] = value
+        self._data[unsafe_offset=x] = value
     def __setitem__(self, x: Int, y: Int, value: Scalar[Self.dtype]):
-        self._data[x * Self.Ny + y] = value
+        self._data[unsafe_offset=x * Self.Ny + y] = value
     def __setitem__(self, x: Int, y: Int, z: Int, value: Scalar[Self.dtype]):
-        self._data[x * Self.Ny * Self.Nz + y * Self.Nz + z] = value
+        self._data[unsafe_offset=x * Self.Ny * Self.Nz + y * Self.Nz + z] = value
 
 
 struct array[
@@ -69,7 +63,7 @@ struct array[
 ](DevicePassable, ImplicitlyCopyable):
     comptime _N = Self.Nx * Self.Ny * Self.Nz
     var _ctx : Optional[DeviceContext]
-    var _data: UnsafePointer[Scalar[Self.dtype], MutAnyOrigin]
+    var _data: Pointer[Scalar[Self.dtype], MutUntrackedOrigin]
     var _on_host: Bool
     var _owned: Bool
 
@@ -101,7 +95,7 @@ struct array[
     def __init__(out self) raises:
         self._ctx = None
         var list = List[Scalar[Self.dtype]](unsafe_uninit_length=Self._N)
-        self._data = list.steal_data()
+        self._data = list.unsafe_take_allocation().unsafe_leak()
         self._on_host = True
         self._owned = True
 
@@ -109,7 +103,7 @@ struct array[
     def __init__(out self, filler: Scalar[Self.dtype]) raises:
         self._ctx = None
         var list = List[Scalar[Self.dtype]](length=Self._N, fill=filler)
-        self._data = list.steal_data()
+        self._data = list.unsafe_take_allocation().unsafe_leak()
         self._on_host = True
         self._owned = True
 
@@ -117,7 +111,7 @@ struct array[
     def __init__(
         out self,
         ctx: Optional[DeviceContext],
-        data: UnsafePointer[Scalar[Self.dtype], MutAnyOrigin],
+        data: Pointer[Scalar[Self.dtype], MutUntrackedOrigin],
         on_host: Bool,
         _owned: Bool
     ):
@@ -128,27 +122,27 @@ struct array[
 
     # 1D indexing
     def __getitem__(ref self, x: Int) raises -> Scalar[Self.dtype]:
-        return self._data[x]
+        return self._data[unsafe_offset=x]
 
     # 2D indexing
     def __getitem__(ref self, x: Int, y: Int) raises -> Scalar[Self.dtype]:
-        return self._data[x * Self.Ny + y]
+        return self._data[unsafe_offset=x * Self.Ny + y]
 
     # 3D indexing
     def __getitem__(ref self, x: Int, y: Int, z: Int) raises -> Scalar[Self.dtype]:
-        return self._data[x * Self.Ny * Self.Nz + y * Self.Nz + z]
+        return self._data[unsafe_offset=x * Self.Ny * Self.Nz + y * Self.Nz + z]
 
     # 1D setitem
     def __setitem__(mut self, x: Int, value: Scalar[Self.dtype]) raises:
-        self._data[x] = value
+        self._data[unsafe_offset=x] = value
 
     # 2D setitem
     def __setitem__(mut self, x: Int, y: Int, value: Scalar[Self.dtype]) raises:
-        self._data[x * Self.Ny + y] = value
+        self._data[unsafe_offset=x * Self.Ny + y] = value
 
     # 3D setitem
     def __setitem__(mut self, x: Int, y: Int, z: Int, value: Scalar[Self.dtype]) raises:
-        self._data[x * Self.Ny * Self.Nz + y * Self.Nz + z] = value
+        self._data[unsafe_offset=x * Self.Ny * Self.Nz + y * Self.Nz + z] = value
 
     # Move device buffer to host for GPU backend, does nothing in other cases
     def to_host(mut self) raises:
@@ -166,10 +160,10 @@ struct array[
             self._data = d_buff.take_ptr()
             self._on_host = False
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         if self._owned:
             comptime if Self.backend == "cpu":
-                self._data.free()
+                self._data.unsafe_free()
             # GPU data cleanup: TODO ??
 
     # DevicePassable requirements
@@ -178,22 +172,14 @@ struct array[
     def _view(self) -> array_ref[Self.dtype, Self.Nx, Self.Ny, Self.Nz]:
         return array_ref[Self.dtype, Self.Nx, Self.Ny, Self.Nz](self._data)
 
-    def _to_device_type[
-        mut_origin: Origin[mut=True]
-    ](
-        self,
-        target: UnsafePointer[NoneType, mut_origin]
+    def _to_device_type(
+        self, mut encoder: Some[DeviceTypeEncoder], target: MutOpaquePointer[_]
     ):
-        target.bitcast[array_ref[Self.dtype, Self.Nx, Self.Ny, Self.Nz]]()
-            .init_pointee_copy(self._view())
+        self._view()._to_device_type(encoder, target)
 
     @staticmethod
     def get_type_name() -> String:
         return "MojitoArray"
-
-    @staticmethod
-    def get_device_type_name() -> String:
-        return "MojitoArrayView"
 
 
 struct Mojito[backend: String]():
@@ -322,14 +308,15 @@ struct Mojito[backend: String]():
         else:
             # func() must take a device_type, so we must convert each argument
             # to device_type even for the CPU path.
-            # _to_device_type() mutates a pointer, so we must allocate it first
+            # _to_device_type() encodes into raw storage, so allocate it first
+            var encoder = DefaultDeviceTypeEncoder()
             var dv = stack_allocation[1, V1.device_type]()
-            # _to_device_type() takes a void pointer, so we need to cast
-            v1._to_device_type(dv.bitcast[NoneType]())
+            # _to_device_type() takes an opaque pointer, so we need to cast
+            v1._to_device_type(encoder, dv.unsafe_bitcast[NoneType]())
 
-            def wrapper(i: Int) capturing -> None:
-                func(i, dv[0])
-            parallelize[wrapper](Nx)
+            def wrapper(i: Int) {imm dv}:
+                func(i, dv[])
+            parallelize(wrapper, Nx)
 
     def parallel_for[
         Nx: Int,
@@ -352,15 +339,16 @@ struct Mojito[backend: String]():
             self._ctx.value().synchronize()
         # CPU path:
         else:
+            var encoder = DefaultDeviceTypeEncoder()
             var dv1 = stack_allocation[1, V1.device_type]()
             var dv2 = stack_allocation[1, V2.device_type]()
 
-            v1._to_device_type(dv1.bitcast[NoneType]())
-            v2._to_device_type(dv2.bitcast[NoneType]())
+            v1._to_device_type(encoder, dv1.unsafe_bitcast[NoneType]())
+            v2._to_device_type(encoder, dv2.unsafe_bitcast[NoneType]())
 
-            def wrapper(i: Int) capturing -> None:
-                func(i, dv1[0], dv2[0])
-            parallelize[wrapper](Nx)
+            def wrapper(i: Int) {imm dv1, imm dv2}:
+                func(i, dv1[], dv2[])
+            parallelize(wrapper, Nx)
 
     def parallel_for[
         Nx: Int,
@@ -385,17 +373,18 @@ struct Mojito[backend: String]():
             self._ctx.value().synchronize()
         # CPU path:
         else:
+            var encoder = DefaultDeviceTypeEncoder()
             var dv1 = stack_allocation[1, V1.device_type]()
             var dv2 = stack_allocation[1, V2.device_type]()
             var dv3 = stack_allocation[1, V3.device_type]()
 
-            v1._to_device_type(dv1.bitcast[NoneType]())
-            v2._to_device_type(dv2.bitcast[NoneType]())
-            v3._to_device_type(dv3.bitcast[NoneType]())
+            v1._to_device_type(encoder, dv1.unsafe_bitcast[NoneType]())
+            v2._to_device_type(encoder, dv2.unsafe_bitcast[NoneType]())
+            v3._to_device_type(encoder, dv3.unsafe_bitcast[NoneType]())
 
-            def wrapper(i: Int) capturing -> None:
-                func(i, dv1[0], dv2[0], dv3[0])
-            parallelize[wrapper](Nx)
+            def wrapper(i: Int) {imm dv1, imm dv2, imm dv3}:
+                func(i, dv1[], dv2[], dv3[])
+            parallelize(wrapper, Nx)
 
 
     def parallel_for[
@@ -419,17 +408,18 @@ struct Mojito[backend: String]():
             )
             self._ctx.value().synchronize()
         else:
+            var encoder = DefaultDeviceTypeEncoder()
             var dv1 = stack_allocation[1, V1.device_type]()
             var dv2 = stack_allocation[1, V2.device_type]()
             var dv3 = stack_allocation[1, V3.device_type]()
             var dv4 = stack_allocation[1, V4.device_type]()
-            v1._to_device_type(dv1.bitcast[NoneType]())
-            v2._to_device_type(dv2.bitcast[NoneType]())
-            v3._to_device_type(dv3.bitcast[NoneType]())
-            v4._to_device_type(dv4.bitcast[NoneType]())
-            def wrapper(i: Int) capturing -> None:
-                func(i, dv1[0], dv2[0], dv3[0], dv4[0])
-            parallelize[wrapper](Nx)
+            v1._to_device_type(encoder, dv1.unsafe_bitcast[NoneType]())
+            v2._to_device_type(encoder, dv2.unsafe_bitcast[NoneType]())
+            v3._to_device_type(encoder, dv3.unsafe_bitcast[NoneType]())
+            v4._to_device_type(encoder, dv4.unsafe_bitcast[NoneType]())
+            def wrapper(i: Int) {imm dv1, imm dv2, imm dv3, imm dv4}:
+                func(i, dv1[], dv2[], dv3[], dv4[])
+            parallelize(wrapper, Nx)
 
     def parallel_for[
         Nx: Int,
@@ -453,19 +443,20 @@ struct Mojito[backend: String]():
             )
             self._ctx.value().synchronize()
         else:
+            var encoder = DefaultDeviceTypeEncoder()
             var dv1 = stack_allocation[1, V1.device_type]()
             var dv2 = stack_allocation[1, V2.device_type]()
             var dv3 = stack_allocation[1, V3.device_type]()
             var dv4 = stack_allocation[1, V4.device_type]()
             var dv5 = stack_allocation[1, V5.device_type]()
-            v1._to_device_type(dv1.bitcast[NoneType]())
-            v2._to_device_type(dv2.bitcast[NoneType]())
-            v3._to_device_type(dv3.bitcast[NoneType]())
-            v4._to_device_type(dv4.bitcast[NoneType]())
-            v5._to_device_type(dv5.bitcast[NoneType]())
-            def wrapper(i: Int) capturing -> None:
-                func(i, dv1[0], dv2[0], dv3[0], dv4[0], dv5[0])
-            parallelize[wrapper](Nx)
+            v1._to_device_type(encoder, dv1.unsafe_bitcast[NoneType]())
+            v2._to_device_type(encoder, dv2.unsafe_bitcast[NoneType]())
+            v3._to_device_type(encoder, dv3.unsafe_bitcast[NoneType]())
+            v4._to_device_type(encoder, dv4.unsafe_bitcast[NoneType]())
+            v5._to_device_type(encoder, dv5.unsafe_bitcast[NoneType]())
+            def wrapper(i: Int) {imm dv1, imm dv2, imm dv3, imm dv4, imm dv5}:
+                func(i, dv1[], dv2[], dv3[], dv4[], dv5[])
+            parallelize(wrapper, Nx)
 
     # 3D overloads
     # iz (fastest in row-major) = thread_idx.x
@@ -489,13 +480,14 @@ struct Mojito[backend: String]():
             )
             self._ctx.value().synchronize()
         else:
+            var encoder = DefaultDeviceTypeEncoder()
             var dv1 = stack_allocation[1, V1.device_type]()
-            v1._to_device_type(dv1.bitcast[NoneType]())
-            def wrapper(ix: Int) capturing -> None:
+            v1._to_device_type(encoder, dv1.unsafe_bitcast[NoneType]())
+            def wrapper(ix: Int) {imm dv1}:
                 for iy in range(Ny):
                     for iz in range(Nz):
-                        func(ix, iy, iz, dv1[0])
-            parallelize[wrapper](Nx)
+                        func(ix, iy, iz, dv1[])
+            parallelize(wrapper, Nx)
 
     def parallel_for[
         Nx: Int, Ny: Int, Nz: Int,
@@ -518,15 +510,16 @@ struct Mojito[backend: String]():
             )
             self._ctx.value().synchronize()
         else:
+            var encoder = DefaultDeviceTypeEncoder()
             var dv1 = stack_allocation[1, V1.device_type]()
             var dv2 = stack_allocation[1, V2.device_type]()
-            v1._to_device_type(dv1.bitcast[NoneType]())
-            v2._to_device_type(dv2.bitcast[NoneType]())
-            def wrapper(ix: Int) capturing -> None:
+            v1._to_device_type(encoder, dv1.unsafe_bitcast[NoneType]())
+            v2._to_device_type(encoder, dv2.unsafe_bitcast[NoneType]())
+            def wrapper(ix: Int) {imm dv1, imm dv2}:
                 for iy in range(Ny):
                     for iz in range(Nz):
-                        func(ix, iy, iz, dv1[0], dv2[0])
-            parallelize[wrapper](Nx)
+                        func(ix, iy, iz, dv1[], dv2[])
+            parallelize(wrapper, Nx)
 
 
     def parallel_reduce[
@@ -541,12 +534,12 @@ struct Mojito[backend: String]():
         var res: Scalar[dtype] = 0
 
         comptime if Self.backend == "gpu":
-            partial = self._ctx.value().enqueue_create_buffer[dtype](num_blocks)
+            var partial = self._ctx.value().enqueue_create_buffer[dtype](num_blocks)
 
             def kernel(
                 v1: V1.device_type,
                 v2: V2.device_type,
-                partial: UnsafePointer[Scalar[dtype], MutAnyOrigin]
+                partial: Pointer[Scalar[dtype], MutAnyOrigin]
             ):
                 var shared = stack_allocation[
                     num_threads,
@@ -556,20 +549,20 @@ struct Mojito[backend: String]():
                 var i = Int(block_idx.x * block_dim.x + thread_idx.x)
                 var i_local = Int(thread_idx.x)
                 if i < N:
-                    shared[thread_idx.x] = func(i, v1, v2)
+                    shared[unsafe_offset=thread_idx.x] = func(i, v1, v2)
                 else:
-                    shared[thread_idx.x] = 0
+                    shared[unsafe_offset=thread_idx.x] = 0
                 barrier()
 
                 var offset = num_threads // 2
                 while offset > 0:
                     if i_local < offset:
-                        shared[i_local] += shared[i_local + offset]
+                        shared[unsafe_offset=i_local] += shared[unsafe_offset=i_local + offset]
                     barrier()
                     offset >>= 1
 
                 if i_local == 0:
-                    partial[block_idx.x] = shared[0]
+                    partial[unsafe_offset=block_idx.x] = shared[unsafe_offset=0]
 
             self._ctx.value().enqueue_function[kernel](
                 v1, v2, partial,
@@ -583,24 +576,25 @@ struct Mojito[backend: String]():
                     res += h_partial[i]
         # CPU path:
         else:
+            var encoder = DefaultDeviceTypeEncoder()
             var dv1 = stack_allocation[1, V1.device_type]()
             var dv2 = stack_allocation[1, V2.device_type]()
-            v1._to_device_type(dv1.bitcast[NoneType]())
-            v2._to_device_type(dv2.bitcast[NoneType]())
+            v1._to_device_type(encoder, dv1.unsafe_bitcast[NoneType]())
+            v2._to_device_type(encoder, dv2.unsafe_bitcast[NoneType]())
 
             var num_workers = parallelism_level()
             var chunk = ceildiv(N, num_workers)
             var partials = List[Scalar[dtype]](length=num_workers, fill=0)
 
-            def worker(tid: Int) capturing -> None:
+            def worker(tid: Int) {mut partials, imm chunk, imm dv1, imm dv2}:
                 var start = tid * chunk
                 var end = min(start + chunk, N)
                 var s: Scalar[dtype] = 0
                 for i in range(start, end):
-                    s += func(i, dv1[0], dv2[0])
+                    s += func(i, dv1[], dv2[])
                 partials[tid] = s
 
-            parallelize[worker](num_workers)
+            parallelize(worker, num_workers)
 
             for i in range(num_workers):
                 res += partials[i]

@@ -55,7 +55,7 @@ def axpy_kernel(
     y[i] = alpha * x[i] + y[i]
 
 
-def main();
+def main() raises:
 
     comptime backend = "gpu" # or "cpu"
     mj = Mojito[backend]()
@@ -75,7 +75,7 @@ def main();
 
 ## Known issues
 
-- Current version locked to `Mojo==1.0.0b2.dev2026051106`
+- Current version pinned to `Mojo==1.0.0` and `MAX==26.5.0` (the `max` conda package provides the `max` Mojo package, where `DeviceContext` and other GPU host APIs live as of Mojo 1.0)
 - Apple M1/M3 GPU support requires running `xcodebuild -downloadComponent MetalToolchain`, see [issue](https://github.com/modular/modular/issues/6466). 
 
 ## Project status

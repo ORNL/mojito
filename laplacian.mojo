@@ -40,10 +40,10 @@ def laplacian_body(
 
 
 def run[backend: String]() raises:
-    mj = Mojito[backend]()
+    var mj = Mojito[backend]()
 
-    u = mj.empty[dtype, L, L, L]()
-    f = mj.empty[dtype, L, L, L]()
+    var u = mj.empty[dtype, L, L, L]()
+    var f = mj.empty[dtype, L, L, L]()
 
     mj.parallel_for[L, L, L, func=init_body](u)
 
@@ -55,7 +55,7 @@ def run[backend: String]() raises:
     # Warmup
     mj.parallel_for[L, L, L, func=laplacian_body](f, u)
 
-    var total_ns: UInt = 0
+    var total_ns: Int = 0
     for _ in range(num_iter):
         var start = monotonic()
         mj.parallel_for[L, L, L, func=laplacian_body](f, u)

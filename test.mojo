@@ -1,31 +1,32 @@
 from std.testing import assert_equal, TestSuite
-from std.memory import UnsafePointer
 from mojito import *
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.host import DeviceContext
+from max.gpu.host import DeviceContext
 from std.math import ceildiv
 from std.sys import has_accelerator
 
+# Int is no longer DevicePassable (host/device width mismatch), so kernel
+# arguments use the fixed-width Int32 instead.
 def init_kernel_gpu[
     dtype: DType
 ](
-    Nx: Int,
-    inout_array: UnsafePointer[Scalar[dtype], MutAnyOrigin]
+    Nx: Int32,
+    inout_array: Pointer[Scalar[dtype], MutUntrackedOrigin]
 ):
     var i: Int = block_idx.x * block_dim.x + thread_idx.x
-    if i < Nx:
-        inout_array[i] = Scalar[dtype](i)
+    if i < Int(Nx):
+        inout_array[unsafe_offset=i] = Scalar[dtype](i)
 
 
 def init_kernel_cpu[
     dtype: DType
 ](
     Nx: Int,
-    inout_array: UnsafePointer[Scalar[dtype], MutAnyOrigin]
+    inout_array: Pointer[Scalar[dtype], MutUntrackedOrigin]
 ):
     for i in range(Nx):
-        inout_array[i] = Scalar[dtype](i)
+        inout_array[unsafe_offset=i] = Scalar[dtype](i)
 
 
 def test_cpu_arrays() raises:
@@ -33,12 +34,12 @@ def test_cpu_arrays() raises:
     comptime Nx = 5
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
+    var mj = Mojito[backend]()
 
-    mj_arr = mj.empty[dtype, Nx]()
-    mj_zeros = mj.zeros[dtype, Nx]()
-    mj_ones = mj.ones[dtype, Nx]()
-    mj_fill = mj.fill[dtype, Nx](-1.0)
+    var mj_arr = mj.empty[dtype, Nx]()
+    var mj_zeros = mj.zeros[dtype, Nx]()
+    var mj_ones = mj.ones[dtype, Nx]()
+    var mj_fill = mj.fill[dtype, Nx](-1.0)
 
     for i in range(Nx):
         mj_arr[i] = Scalar[dtype](i)
@@ -55,8 +56,8 @@ def test_cpu_init() raises:
     comptime Nx = 5
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    mj_arr = mj.zeros[dtype, Nx]()
+    var mj = Mojito[backend]()
+    var mj_arr = mj.zeros[dtype, Nx]()
 
     init_kernel_cpu[dtype](Nx, mj_arr._data)
 
@@ -69,11 +70,11 @@ def test_gpu_arrays() raises:
     comptime Nx = 5
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
+    var mj = Mojito[backend]()
 
-    mj_zeros = mj.zeros[dtype, Nx]()
-    mj_ones = mj.ones[dtype, Nx]()
-    mj_fill = mj.fill[dtype, Nx](-1.0)
+    var mj_zeros = mj.zeros[dtype, Nx]()
+    var mj_ones = mj.ones[dtype, Nx]()
+    var mj_fill = mj.fill[dtype, Nx](-1.0)
 
     mj_zeros.to_host()
     mj_ones.to_host()
@@ -92,14 +93,14 @@ def test_gpu_kernel() raises:
     comptime Nx = 5
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    mj_arr = mj.empty[dtype, Nx]()
+    var mj = Mojito[backend]()
+    var mj_arr = mj.empty[dtype, Nx]()
 
-    ctx = mj.get_ctx()
+    var ctx = mj.get_ctx()
     comptime kernel = init_kernel_gpu[dtype]
     var compiled_func = ctx.compile_function[kernel]()
     ctx.enqueue_function(compiled_func,
-        Nx,
+        Int32(Nx),
         mj_arr._data,
         grid_dim=ceildiv(Nx, 256),
         block_dim=256
@@ -120,9 +121,9 @@ def test_3D_gpu_arrays() raises:
     comptime Nz = 4
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
+    var mj = Mojito[backend]()
 
-    mj_arr = mj.empty[dtype, Nx, Ny, Nz]()
+    var mj_arr = mj.empty[dtype, Nx, Ny, Nz]()
 
     mj_arr.to_host()
     mj.sync()
@@ -141,11 +142,11 @@ def test_cpu_copy_functions() raises:
     comptime Nx = 5
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    mj_arr = mj.fill[dtype, Nx](3.0)
+    var mj = Mojito[backend]()
+    var mj_arr = mj.fill[dtype, Nx](3.0)
 
-    host_copy = mj.copy_to_host(mj_arr)
-    dev_copy = mj.copy_to_device(mj_arr)
+    var host_copy = mj.copy_to_host(mj_arr)
+    var dev_copy = mj.copy_to_device(mj_arr)
 
     # Both are shallow (non-owning); values match the original
     for i in range(Nx):
@@ -162,11 +163,11 @@ def test_gpu_copy_to_host() raises:
     comptime Nx = 5
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    dev_arr = mj.fill[dtype, Nx](7.0)  # buffer starts on device
+    var mj = Mojito[backend]()
+    var dev_arr = mj.fill[dtype, Nx](7.0)  # buffer starts on device
 
     # Deep copy: new host buffer, dev_arr stays on device
-    host_copy = mj.copy_to_host(dev_arr)
+    var host_copy = mj.copy_to_host(dev_arr)
     mj.sync()
 
     for i in range(Nx):
@@ -185,17 +186,17 @@ def test_gpu_copy_to_device() raises:
     comptime Nx = 5
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
+    var mj = Mojito[backend]()
 
     # Build a host-pinned source array with known values
-    host_arr = mj.fill[dtype, Nx](0.0)
+    var host_arr = mj.fill[dtype, Nx](0.0)
     host_arr.to_host()
     mj.sync()
     for i in range(Nx):
         host_arr[i] = Scalar[dtype](i)
 
     # Deep copy to device
-    dev_copy = mj.copy_to_device(host_arr)
+    var dev_copy = mj.copy_to_device(host_arr)
 
     # Move back to verify values
     dev_copy.to_host()
@@ -235,8 +236,8 @@ def test_cpu_parallel_for_1_arg() raises:
     comptime N = 10
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    a = mj.zeros[dtype, N]()
+    var mj = Mojito[backend]()
+    var a = mj.zeros[dtype, N]()
 
     mj.parallel_for[N, func=fill_body](a)
 
@@ -249,8 +250,8 @@ def test_gpu_parallel_for_1_arg() raises:
     comptime N = 10
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    a = mj.zeros[dtype, N]()
+    var mj = Mojito[backend]()
+    var a = mj.zeros[dtype, N]()
     mj.parallel_for[N, func=fill_body, num_threads=128](a)
 
     a.to_host()
@@ -265,9 +266,9 @@ def test_cpu_parallel_for_2_args() raises:
     comptime N = 10
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    a = mj.zeros[dtype, N]()
-    b = mj.fill[dtype, N](7.0)
+    var mj = Mojito[backend]()
+    var a = mj.zeros[dtype, N]()
+    var b = mj.fill[dtype, N](7.0)
 
     mj.parallel_for[N, func=copy_body](a, b)
 
@@ -280,9 +281,9 @@ def test_gpu_parallel_for_2_args() raises:
     comptime N = 10
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    a = mj.zeros[dtype, N]()
-    b = mj.fill[dtype, N](7.0)
+    var mj = Mojito[backend]()
+    var a = mj.zeros[dtype, N]()
+    var b = mj.fill[dtype, N](7.0)
 
     mj.parallel_for[N, func=copy_body](a, b)
 
@@ -299,10 +300,10 @@ def test_cpu_parallel_for_3_args() raises:
     comptime N = 10
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    alpha = Float32(2.0)
-    x = mj.fill[dtype, N](3.0)
-    y = mj.fill[dtype, N](1.0)
+    var mj = Mojito[backend]()
+    var alpha = Float32(2.0)
+    var x = mj.fill[dtype, N](3.0)
+    var y = mj.fill[dtype, N](1.0)
 
     mj.parallel_for[N, func=axpy_body](alpha, x, y)
 
@@ -316,10 +317,10 @@ def test_gpu_parallel_for_3_args() raises:
     comptime N = 10
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    alpha = Float32(2.0)
-    x = mj.fill[dtype, N](3.0)
-    y = mj.fill[dtype, N](1.0)
+    var mj = Mojito[backend]()
+    var alpha = Float32(2.0)
+    var x = mj.fill[dtype, N](3.0)
+    var y = mj.fill[dtype, N](1.0)
 
     mj.parallel_for[N, func=axpy_body](alpha, x, y)
 
@@ -343,9 +344,9 @@ def test_cpu_parallel_reduce_2_args() raises:
     comptime N = 10
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    x = mj.fill[dtype, N](3.0)
-    y = mj.fill[dtype, N](2.0)
+    var mj = Mojito[backend]()
+    var x = mj.fill[dtype, N](3.0)
+    var y = mj.fill[dtype, N](2.0)
 
     var res = mj.parallel_reduce[N, dtype=dtype, func=body](x, y)
 
@@ -357,9 +358,9 @@ def test_gpu_parallel_reduce_2_args() raises:
     comptime N = 10
     comptime dtype = DType.float32
 
-    mj = Mojito[backend]()
-    x = mj.fill[dtype, N](3.0)
-    y = mj.fill[dtype, N](2.0)
+    var mj = Mojito[backend]()
+    var x = mj.fill[dtype, N](3.0)
+    var y = mj.fill[dtype, N](2.0)
 
     var res = mj.parallel_reduce[N, dtype=dtype, func=body](x, y)
 

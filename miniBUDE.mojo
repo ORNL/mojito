@@ -83,7 +83,7 @@ struct Atom(ImplicitlyCopyable, Movable):
         var bytes = file.read_bytes()
         file.close()
 
-        var ptr = bytes.unsafe_ptr().bitcast[UInt8]()
+        var ptr = bytes.unsafe_ptr().unsafe_bitcast[UInt8]()
         var atoms = List[Atom]()
         var atom_size = 16      # Float32 x,y,z + Int32 type = 16 bytes
 
@@ -92,10 +92,10 @@ struct Atom(ImplicitlyCopyable, Movable):
 
         for i in range(total):
             var offset = i * atom_size
-            var x = (ptr + offset +  0).bitcast[Float32]()[0]
-            var y = (ptr + offset +  4).bitcast[Float32]()[0]
-            var z = (ptr + offset +  8).bitcast[Float32]()[0]
-            var t = (ptr + offset + 12).bitcast[Int32]()[0]
+            var x = ptr.unsafe_offset(offset + 0).unsafe_bitcast[Float32]()[]
+            var y = ptr.unsafe_offset(offset + 4).unsafe_bitcast[Float32]()[]
+            var z = ptr.unsafe_offset(offset + 8).unsafe_bitcast[Float32]()[]
+            var t = ptr.unsafe_offset(offset + 12).unsafe_bitcast[Int32]()[]
             atoms.append(Atom(x, y, z, t))
         return atoms^
 
@@ -117,7 +117,7 @@ struct FFParams(ImplicitlyCopyable, Movable):
         var bytes = file.read_bytes()
         file.close()
 
-        var ptr = bytes.unsafe_ptr().bitcast[UInt8]()
+        var ptr = bytes.unsafe_ptr().unsafe_bitcast[UInt8]()
         var ffparams = List[FFParams]()
         var atom_size = 16      # 3 Float32s + 1 Int = 16 bytes
 
@@ -126,10 +126,10 @@ struct FFParams(ImplicitlyCopyable, Movable):
 
         for i in range(total):
             var offset = i * atom_size
-            var hbtype = (ptr + offset +  0).bitcast[Int32]()[0]
-            var radius = (ptr + offset +  4).bitcast[Float32]()[0]
-            var hphb   = (ptr + offset +  8).bitcast[Float32]()[0]
-            var elsc   = (ptr + offset + 12).bitcast[Float32]()[0]
+            var hbtype = ptr.unsafe_offset(offset + 0).unsafe_bitcast[Int32]()[]
+            var radius = ptr.unsafe_offset(offset + 4).unsafe_bitcast[Float32]()[]
+            var hphb   = ptr.unsafe_offset(offset + 8).unsafe_bitcast[Float32]()[]
+            var elsc   = ptr.unsafe_offset(offset + 12).unsafe_bitcast[Float32]()[]
             ffparams.append(FFParams(hbtype, radius, hphb, elsc))
         return ffparams^
 
@@ -138,7 +138,7 @@ def read_poses(path: String) raises -> List[List[Float32]]:
     var bytes = file.read_bytes()
     file.close()
 
-    var ptr = bytes.unsafe_ptr().bitcast[Float32]()
+    var ptr = bytes.unsafe_ptr().unsafe_bitcast[Float32]()
     var total_floats = len(bytes) // 4
     if total_floats % 6 != 0:
         raise Error("Pose size (", total_floats, ") not divisible by 6")
@@ -151,7 +151,7 @@ def read_poses(path: String) raises -> List[List[Float32]]:
     for i in range(6):
         var component = List[Float32](capacity=NUM_POSES)
         for j in range(NUM_POSES):
-            component.append(ptr[i * num_poses + j])
+            component.append(ptr[unsafe_offset=i * num_poses + j])
         poses.append(component^)
     return poses^
 

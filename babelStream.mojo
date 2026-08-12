@@ -53,27 +53,27 @@ def dot_body(
 
 
 def run[backend: String]() raises:
-    csv_output = False
-    args = argv()
-    i = 0
+    var csv_output = False
+    var args = argv()
+    var i = 0
     while i < len(args):
-        arg = args[i]
+        var arg = args[i]
         if arg == "--csv":
             csv_output = True
         i += 1
 
-    mj = Mojito[backend]()
+    var mj = Mojito[backend]()
 
-    a = mj.fill[dtype, SIZE](initA)
-    b = mj.fill[dtype, SIZE](initB)
-    c = mj.fill[dtype, SIZE](initC)
+    var a = mj.fill[dtype, SIZE](initA)
+    var b = mj.fill[dtype, SIZE](initB)
+    var c = mj.fill[dtype, SIZE](initC)
 
     var timings = List[Float64](length=5 * num_iter, fill=0.0)
 
     for i in range(num_iter):
-        start = monotonic()
+        var start = monotonic()
         mj.parallel_for[SIZE, func=copy_body](a, c)
-        end = monotonic()
+        var end = monotonic()
         timings[0 * num_iter + i] = Float64(end - start)
 
         start = monotonic()
