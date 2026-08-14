@@ -74,7 +74,7 @@ jobs:
       - name: Update SSL certificates
         if: steps.check.outputs.triggered == 'true'
         run: |
-          brew install ca-certificates
+          brew install ca-certificates || true
           brew upgrade ca-certificates || true
 
       - name: Get Mojo version
