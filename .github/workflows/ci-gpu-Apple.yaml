@@ -71,6 +71,12 @@ jobs:
           repository: ${{fromJson(steps.request.outputs.data).head.repo.full_name}}
           ref: ${{steps.pr_data.outputs.branch}}
 
+      - name: Update SSL certificates
+        if: steps.check.outputs.triggered == 'true'
+        run: |
+          brew install ca-certificates || true
+          brew upgrade ca-certificates || true
+
       - name: Get Mojo version
         if: steps.check.outputs.triggered == 'true'
         run: |
