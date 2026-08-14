@@ -26,7 +26,6 @@ jobs:
 
       - name: Get Mojo version
         run: |
-          pixi add modular
           pixi run mojo --version
 
       - name: Test threads
